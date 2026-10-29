@@ -122,7 +122,6 @@ export const NotificationService = {
           try {
             await supabase.from('push_subscriptions').upsert([{
               user_id: idValue,
-              user_login: loginValue,
               endpoint: subscription.endpoint,
               subscription: subJson,
               user_agent: navigator.userAgent,

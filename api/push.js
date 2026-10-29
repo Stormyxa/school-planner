@@ -37,6 +37,25 @@ function isDuplicate(key) {
   return false;
 }
 
+// Поиск UUID пользователя (поддерживает и чистый UUID, и логин вроде 'director43')
+async function resolveUserUuid(supabase, idOrLogin) {
+  if (!idOrLogin) return null;
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(idOrLogin));
+  if (isUuid) return String(idOrLogin);
+
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .or(`login.ilike.${idOrLogin},email.ilike.${idOrLogin}`)
+      .maybeSingle();
+    if (profile?.id) return profile.id;
+  } catch (err) {
+    console.warn('[push] Profile lookup warning:', err.message);
+  }
+  return String(idOrLogin);
+}
+
 export default async function handler(req, res) {
   // CORS заголовки
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -71,22 +90,29 @@ export default async function handler(req, res) {
     }
     if (supabase) {
       try {
-        const idValue = String(userId || userLogin || 'guest');
-        const loginValue = userLogin ? String(userLogin).toLowerCase() : null;
+        const userUuid = await resolveUserUuid(supabase, userId || userLogin);
 
-        await supabase.from('push_subscriptions').upsert([{
-          user_id:      idValue,
-          user_login:   loginValue,
+        const subData = {
+          user_id:      userUuid || 'guest',
           endpoint:     subscription.endpoint,
           subscription: subscription,
           user_agent:   req.headers['user-agent'] || null,
           updated_at:   new Date().toISOString()
-        }], { onConflict: 'endpoint' });
+        };
 
-        return res.status(200).json({ success: true, message: 'Subscription registered' });
+        const { error: upsertErr } = await supabase
+          .from('push_subscriptions')
+          .upsert([subData], { onConflict: 'endpoint' });
+
+        if (upsertErr) {
+          console.warn('[push] Save sub error:', upsertErr.message);
+          return res.status(400).json({ success: false, error: upsertErr.message });
+        }
+
+        return res.status(200).json({ success: true, message: 'Subscription registered', userId: userUuid });
       } catch (err) {
         console.warn('[push] Save sub error:', err.message);
-        return res.status(200).json({ success: true, warning: err.message });
+        return res.status(500).json({ success: false, error: err.message });
       }
     }
     return res.status(200).json({ success: true, message: 'Supabase not configured' });
@@ -114,14 +140,15 @@ export default async function handler(req, res) {
   // б) Прямой клиентский вызов: body.{ targetUserId, title, message... }
   const record = body.record || body;
 
-  const targetUserId = body.targetUserId || record.user_id || null;
+  const rawTarget    = body.targetUserId || record.user_id || null;
   const targetRole   = body.targetRole   || null;
-  const excludeUserId = body.excludeUserId || null;
+  const rawExclude   = body.excludeUserId || null;
   const title        = body.title        || record.title;
   const message      = body.message      || record.message;
   const taskId       = body.taskId       || record.task_id || null;
   const type         = body.type         || record.type || 'task';
   const customTag    = body.tag          || null;
+  const notifId      = body.notifId      || record.id || null;
   const source       = body.source       || (body.record ? 'supabase_webhook' : 'client');
 
   if (!title) {
@@ -129,7 +156,7 @@ export default async function handler(req, res) {
   }
 
   // Защита от дубликатов: проверяем окно 30 секунд
-  const dedupeKey = `${targetUserId || targetRole || 'all'}_${taskId || 'none'}_${title}_${message}`;
+  const dedupeKey = notifId || `${rawTarget || targetRole || 'all'}_${taskId || 'none'}_${title}`;
   if (isDuplicate(dedupeKey)) {
     console.log(`[push] Suppressed duplicate push within 30s window: ${dedupeKey}`);
     return res.status(200).json({ sent: 0, duplicate: true, reason: 'Duplicate suppressed' });
@@ -142,13 +169,13 @@ export default async function handler(req, res) {
   try {
     let query = supabase.from('push_subscriptions').select('*');
 
-    if (targetUserId) {
-      // Ищем подписку либо по UUID, либо по логину пользователя
-      query = query.or(`user_id.eq.${targetUserId},user_login.eq.${targetUserId}`);
+    if (rawTarget) {
+      const targetUuid = await resolveUserUuid(supabase, rawTarget);
+      query = query.eq('user_id', targetUuid);
     } else if (targetRole === 'all' || targetRole === 'teachers') {
-      // Исключаем автора действия, чтобы автор не получал пуш о своем же действии
-      if (excludeUserId) {
-        query = query.not('user_id', 'eq', excludeUserId);
+      if (rawExclude) {
+        const excludeUuid = await resolveUserUuid(supabase, rawExclude);
+        query = query.not('user_id', 'eq', excludeUuid);
       }
     }
 
@@ -156,7 +183,7 @@ export default async function handler(req, res) {
 
     if (subErr) {
       console.warn('[push] Query subs error:', subErr.message);
-      return res.status(200).json({ sent: 0, reason: 'DB query error: ' + subErr.message });
+      return res.status(500).json({ sent: 0, reason: 'DB query error: ' + subErr.message });
     }
 
     if (!subs || subs.length === 0) {
@@ -164,7 +191,7 @@ export default async function handler(req, res) {
     }
 
     // Детерминированный tag: исключает дубликаты на уровне ОС
-    const tag = customTag || (taskId ? `school43-task-${taskId}` : `school43-notif-${record.id || type || Date.now()}`);
+    const tag = customTag || (taskId ? `school43-task-${taskId}` : `school43-notif-${notifId || type || 'general'}`);
 
     const payload = JSON.stringify({
       title,
@@ -275,7 +302,7 @@ async function handleCheckDeadlines(res) {
           const { data: subs } = await supabase
             .from('push_subscriptions')
             .select('*')
-            .or(`user_id.eq.${task.assigned_to_id},user_login.eq.${task.assigned_to_id}`);
+            .eq('user_id', task.assigned_to_id);
 
           if (subs && subs.length > 0) {
             const pushPayload = JSON.stringify({
