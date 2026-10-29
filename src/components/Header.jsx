@@ -12,7 +12,8 @@ import {
   LogOut, 
   MonitorDown,
   RefreshCw,
-  Smartphone
+  Smartphone,
+  Trash2
 } from 'lucide-react';
 
 export default function Header() {
@@ -27,6 +28,8 @@ export default function Header() {
     logout,
     notifications,
     markAllNotificationsRead,
+    deleteNotification,
+    clearAllNotifications,
     refreshData,
     isCloudSyncing,
     deferredPrompt,
@@ -239,19 +242,14 @@ export default function Header() {
               {showNotifMenu && (
                 <>
                   <div 
+                    className="notif-backdrop"
                     onClick={() => setShowNotifMenu(false)}
-                    style={{
-                      position: 'fixed',
-                      inset: 0,
-                      backgroundColor: 'rgba(0,0,0,0.3)',
-                      zIndex: 9998
-                    }}
                   />
                   <div className="notifications-dropdown" style={{
                     position: 'absolute',
                     top: 'calc(100% + 8px)',
                     right: 0,
-                    width: 'min(340px, calc(100vw - 1.5rem))',
+                    width: 'min(360px, calc(100vw - 1.5rem))',
                     backgroundColor: 'var(--bg-surface-elevated)',
                     border: '1px solid var(--border-subtle)',
                     borderRadius: 'var(--radius-md)',
@@ -266,42 +264,103 @@ export default function Header() {
                       alignItems: 'center',
                       marginBottom: '0.6rem',
                       paddingBottom: '0.5rem',
-                      borderBottom: '1px solid var(--border-subtle)'
+                      borderBottom: '1px solid var(--border-subtle)',
+                      gap: '0.4rem'
                     }}>
-                      <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>Хабарламалар / Уведомления</span>
-                      {unreadCount > 0 && (
-                        <button 
-                          onClick={markAllNotificationsRead}
-                          style={{ fontSize: '0.75rem', color: 'var(--color-primary-light)', padding: 0 }}
-                        >
-                          Оқу / Прочитать
-                        </button>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>
+                          {lang === 'kk' ? 'Хабарламалар' : 'Уведомления'}
+                        </span>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          ({notifications.length})
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        {unreadCount > 0 && (
+                          <button 
+                            onClick={markAllNotificationsRead}
+                            className="btn-ghost"
+                            style={{ fontSize: '0.72rem', color: '#0284c7', padding: '0.2rem 0.4rem' }}
+                            title="Все как прочитанные"
+                          >
+                            {lang === 'kk' ? 'Оқылды' : 'Прочитать'}
+                          </button>
+                        )}
+                        {notifications.length > 0 && (
+                          <button 
+                            onClick={clearAllNotifications}
+                            className="btn-ghost"
+                            style={{ fontSize: '0.72rem', color: 'var(--color-danger)', padding: '0.2rem 0.4rem', display: 'flex', alignItems: 'center', gap: '0.2rem' }}
+                            title={lang === 'kk' ? 'Барлығын өшіру' : 'Очистить все навсегда'}
+                          >
+                            <Trash2 size={13} />
+                            <span>{lang === 'kk' ? 'Тазарту' : 'Очистить'}</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
 
-                    <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <div style={{ maxHeight: '340px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
                       {notifications.length === 0 ? (
                         <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>
-                          Жаңа хабарлама жоқ / Нет уведомлений
+                          {lang === 'kk' ? 'Жаңа хабарлама жоқ' : 'Нет уведомлений'}
                         </p>
                       ) : (
                         notifications.map(notif => (
-                          <div key={notif.id} style={{
-                            padding: '0.6rem',
-                            borderRadius: 'var(--radius-sm)',
-                            backgroundColor: notif.read ? 'transparent' : 'var(--bg-surface-subtle)',
-                            borderLeft: notif.read ? '2px solid transparent' : '3px solid #0284c7',
-                            fontSize: '0.8rem'
-                          }}>
-                            <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.2rem' }}>
-                              {notif.title}
+                          <div 
+                            key={notif.id} 
+                            onClick={() => {
+                              if (notif.taskId && window.__openTaskFromNotification) {
+                                window.__openTaskFromNotification(notif.taskId);
+                                setShowNotifMenu(false);
+                              }
+                            }}
+                            className={notif.taskId ? 'hover-card' : ''}
+                            style={{
+                              position: 'relative',
+                              padding: '0.6rem 2.2rem 0.6rem 0.65rem',
+                              borderRadius: 'var(--radius-sm)',
+                              backgroundColor: notif.read ? 'transparent' : 'var(--bg-surface-subtle)',
+                              borderLeft: notif.read ? '2px solid transparent' : '3px solid #0284c7',
+                              fontSize: '0.8rem',
+                              cursor: notif.taskId ? 'pointer' : 'default',
+                              transition: 'background-color 0.15s ease'
+                            }}
+                          >
+                            <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                              <span>{notif.title}</span>
+                              {notif.taskId && (
+                                <span style={{ fontSize: '0.62rem', color: '#0284c7', backgroundColor: '#e0f2fe', padding: '0.05rem 0.35rem', borderRadius: '4px', whiteSpace: 'nowrap' }}>
+                                  {lang === 'kk' ? 'Тапсырма' : 'Поручение'}
+                                </span>
+                              )}
                             </div>
-                            <div style={{ color: 'var(--text-secondary)', lineHeight: 1.3 }}>
+                            <div style={{ color: 'var(--text-secondary)', lineHeight: 1.35, wordBreak: 'break-word' }}>
                               {notif.message}
                             </div>
                             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
                               {notif.time}
                             </div>
+                            {/* Кнопка удаления одного уведомления */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteNotification(notif.id);
+                              }}
+                              className="btn-ghost"
+                              style={{
+                                position: 'absolute',
+                                top: '0.45rem',
+                                right: '0.35rem',
+                                padding: '0.25rem',
+                                color: 'var(--text-muted)',
+                                opacity: 0.65,
+                                borderRadius: '4px'
+                              }}
+                              title={lang === 'kk' ? 'Өшіру' : 'Удалить'}
+                            >
+                              <Trash2 size={13} />
+                            </button>
                           </div>
                         ))
                       )}

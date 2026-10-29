@@ -494,3 +494,22 @@ input:focus, select:focus, textarea:focus {
   }
 }
 
+/* Подложка меню уведомлений: на ПК прозрачная (не затемняет шапку), на телефоне затемняет */
+.notif-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: transparent;
+  z-index: 9998;
+}
+
+@media (max-width: 768px) {
+  .notif-backdrop {
+    background-color: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(2px);
+  }
+}
+
+.hover-card:hover {
+  background-color: var(--bg-surface-subtle) !important;
+}
+

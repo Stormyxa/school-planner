@@ -33,7 +33,7 @@ export const NotificationService = {
    */
   getPermissionStatus() {
     if (!('Notification' in window)) return 'unsupported';
-    return Notification.permission; // 'default' | 'granted' | 'denied'
+    return Notification.permission;
   },
 
   /**
@@ -44,16 +44,26 @@ export const NotificationService = {
       return null;
     }
 
+    const taskId = options.taskId || options.data?.taskId || null;
+    const targetUrl = taskId ? `/?openTaskId=${taskId}&tab=tasks` : '/';
+
     const mergedOptions = {
       icon: '/pwa-192x192.png',
-      badge: '/pwa-192x192.png',
-      vibrate: [200, 100, 200],
-      tag: options.tag || `school43-${Date.now()}`,
+      badge: '/badge-96x96.png', // Прозрачный силуэтный бейдж (устраняет белый квадрат на Android!)
+      image: options.image || '/pwa-512x512.png', // Полноцветная картинка приложения в шторке Android
+      vibrate: [250, 100, 250],
+      tag: options.tag || `school43-${taskId || Date.now()}`,
       renotify: true,
+      data: {
+        url: targetUrl,
+        taskId,
+        tab: 'tasks',
+        ...options.data
+      },
       ...options
     };
 
-    // 1. Попытка через Service Worker (обязательно для Android PWA, где new Notification() запрещен)
+    // 1. Через Service Worker (надежно на смартфонах Android при свернутом приложении)
     if ('serviceWorker' in navigator) {
       try {
         const registration = await navigator.serviceWorker.ready;
@@ -66,9 +76,19 @@ export const NotificationService = {
       }
     }
 
-    // 2. Стандартный конструктор Notification для Desktop (Chrome, Edge, Safari, Firefox)
+    // 2. Стандартный конструктор Notification для Desktop (Windows, macOS, Linux)
     try {
-      return new Notification(title, mergedOptions);
+      const notif = new Notification(title, mergedOptions);
+      notif.onclick = function(e) {
+        e.preventDefault();
+        window.focus();
+        if (taskId && window.__openTaskFromNotification) {
+          window.__openTaskFromNotification(taskId);
+        } else if (targetUrl) {
+          window.location.href = targetUrl;
+        }
+      };
+      return notif;
     } catch (e) {
       console.warn('System notification fallback warning:', e);
       return null;

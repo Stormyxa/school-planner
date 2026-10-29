@@ -92,8 +92,11 @@ CREATE TABLE IF NOT EXISTS public.notifications (
   title TEXT NOT NULL,
   message TEXT NOT NULL,
   type TEXT DEFAULT 'task',
+  task_id UUID,
   is_read BOOLEAN DEFAULT false
 );
+
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS task_id UUID;
 
 -- Индексы
 CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON public.tasks(assigned_to_id);

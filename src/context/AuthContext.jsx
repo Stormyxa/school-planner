@@ -81,12 +81,13 @@ export function AuthProvider({ children }) {
   // Всплывающий живой тост (In-App Toast)
   const [toast, setToast] = useState(null);
 
-  const showToast = useCallback((title, message, type = 'task') => {
+  const showToast = useCallback((title, message, type = 'task', taskId = null) => {
     setToast({
       id: `toast-${Date.now()}`,
       title,
       message,
-      type
+      type,
+      taskId
     });
   }, []);
 
@@ -374,7 +375,7 @@ export function AuthProvider({ children }) {
       const activeUser = currentUserRef.current;
       const userUuid = activeUser ? resolveProfileUuid(activeUser.id || activeUser.login) : null;
 
-      let notifQuery = supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(40);
+      let notifQuery = supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(20);
       if (userUuid) {
         notifQuery = notifQuery.or(`user_id.eq.${userUuid},user_id.is.null`);
       } else {
@@ -389,7 +390,8 @@ export function AuthProvider({ children }) {
           message: n.message,
           time: new Date(n.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
           read: n.is_read,
-          type: n.type || 'task'
+          type: n.type || 'task',
+          taskId: n.task_id || null
         }));
 
         setNotifications(prev => {
@@ -398,7 +400,7 @@ export function AuthProvider({ children }) {
           prev.forEach(p => {
             if (!map.has(p.id)) map.set(p.id, p);
           });
-          const merged = Array.from(map.values());
+          const merged = Array.from(map.values()).slice(0, 20); // Лимит 20 последних
           localStorage.setItem('sp_notifications_kz43', JSON.stringify(merged));
           return merged;
         });
@@ -431,8 +433,8 @@ export function AuthProvider({ children }) {
 
         // Уведомление предназначается МНЕ
         if (notif.user_id === myUuid || notif.user_id === null) {
-          showToast(notif.title, notif.message, notif.type || 'task');
-          NotificationService.send(notif.title, { body: notif.message });
+          showToast(notif.title, notif.message, notif.type || 'task', notif.task_id);
+          NotificationService.send(notif.title, { body: notif.message, taskId: notif.task_id });
           loadFromSupabase(true);
         }
       })
@@ -544,7 +546,7 @@ export function AuthProvider({ children }) {
   // ==========================================================================
   // ОТПРАВКА УВЕДОМЛЕНИЙ АДРЕСАТАМ (БЕЗ ЭХО-КАМЕРЫ ДЛЯ АВТОРА ДЕЙСТВИЯ!)
   // ==========================================================================
-  const dispatchNotification = async ({ targetUserId, targetRole, title, message, type = 'task' }) => {
+  const dispatchNotification = async ({ targetUserId, targetRole, title, message, type = 'task', taskId = null }) => {
     // АВТОР ДЕЙСТВИЯ НИКОГДА НЕ ПОЛУЧАЕТ УВЕДОМЛЕНИЕ О СВОЕМ ЖЕ ДЕЙСТВИИ!
     const isActorTheTarget = targetUserId && (
       targetUserId === currentUser?.id || 
@@ -556,34 +558,44 @@ export function AuthProvider({ children }) {
       try {
         if (targetUserId && !isActorTheTarget) {
           const targetUuid = resolveProfileUuid(targetUserId);
-          await supabase.from('notifications').insert([{
+          const payload = {
             user_id: targetUuid,
             title,
             message,
             type,
             is_read: false
-          }]);
+          };
+          if (taskId && isUuid(taskId)) {
+            payload.task_id = taskId;
+          }
+          await supabase.from('notifications').insert([payload]);
         } else if (targetRole === 'all') {
           // Всем сотрудникам, КРОМЕ автора действия!
           const otherStaff = staff.filter(s => s.id !== currentUser?.id && s.login !== currentUser?.login);
-          const inserts = otherStaff.map(s => ({
-            user_id: resolveProfileUuid(s.id || s.login),
-            title,
-            message,
-            type,
-            is_read: false
-          })).filter(item => item.user_id !== null);
+          const inserts = otherStaff.map(s => {
+            const item = {
+              user_id: resolveProfileUuid(s.id || s.login),
+              title,
+              message,
+              type,
+              is_read: false
+            };
+            if (taskId && isUuid(taskId)) item.task_id = taskId;
+            return item;
+          }).filter(item => item.user_id !== null);
 
           if (inserts.length > 0) {
             await supabase.from('notifications').insert(inserts);
           } else {
-            await supabase.from('notifications').insert([{
+            const payload = {
               user_id: null,
               title,
               message,
               type,
               is_read: false
-            }]);
+            };
+            if (taskId && isUuid(taskId)) payload.task_id = taskId;
+            await supabase.from('notifications').insert([payload]);
           }
         }
       } catch (err) {
@@ -730,7 +742,9 @@ export function AuthProvider({ children }) {
           category: newTask.category
         }]).select().single();
 
+        let createdTaskId = newTask.id;
         if (data) {
+          createdTaskId = data.id;
           setTasks(prev => prev.map(t => t.id === newTask.id ? { ...t, id: data.id } : t));
         }
       } catch (err) {
@@ -742,7 +756,8 @@ export function AuthProvider({ children }) {
       targetUserId: newTask.assignedToId,
       title: 'Жаңа тапсырма / Новое поручение',
       message: `${currentUser?.name}: «${newTask.title}» (мерзімі: ${new Date(newTask.deadline).toLocaleDateString('ru-RU')})`,
-      type: 'task'
+      type: 'task',
+      taskId: createdTaskId
     });
 
     return newTask;
@@ -784,7 +799,8 @@ export function AuthProvider({ children }) {
         targetUserId: targetAssignedId,
         title: 'Тапсырманың күші жойылды / Поручение отменено',
         message: `Поручение «${cancelledTaskTitle}» отменено руководством. Причина: «${reason}»`,
-        type: 'task'
+        type: 'task',
+        taskId: taskId
       });
     }
   };
@@ -827,14 +843,16 @@ export function AuthProvider({ children }) {
           targetUserId: targetTask.assignedToId,
           title: 'Тапсырма қабылданды / Поручение принято',
           message: `«${targetTask.title}» қабылданды. Жарайсыз! (Тексерген: ${currentUser?.name})`,
-          type: 'task'
+          type: 'task',
+          taskId: taskId
         });
       } else if (newStatus === 'revision') {
         dispatchNotification({
           targetUserId: targetTask.assignedToId,
           title: 'Қайта өңдеуге қайтарылды / На доработку',
           message: `«${targetTask.title}». Ескерту: «${extraData.reviewComment || 'Қайта қарау қажет'}» (Тексерген: ${currentUser?.name})`,
-          type: 'task'
+          type: 'task',
+          taskId: taskId
         });
       }
     }
@@ -886,7 +904,8 @@ export function AuthProvider({ children }) {
       targetUserId: recipientId,
       title: 'Есеп тексеруге жіберілді / Отчет сдан',
       message: `${currentUser?.name} сдал(а) отчет по задаче «${targetTask?.title || 'Поручение'}»`,
-      type: 'file'
+      type: 'file',
+      taskId: taskId
     });
   };
 
@@ -1025,6 +1044,40 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Удаление отдельного уведомления
+  const deleteNotification = async (notifId) => {
+    setNotifications(prev => {
+      const updated = prev.filter(n => n.id !== notifId);
+      localStorage.setItem('sp_notifications_kz43', JSON.stringify(updated));
+      return updated;
+    });
+
+    if (isSupabaseConfigured() && supabase && isUuid(notifId)) {
+      try {
+        await supabase.from('notifications').delete().eq('id', notifId);
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  // Полная очистка всех уведомлений пользователя
+  const clearAllNotifications = async () => {
+    setNotifications([]);
+    localStorage.setItem('sp_notifications_kz43', JSON.stringify([]));
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const userUuid = resolveProfileUuid(currentUser?.id || currentUser?.login);
+        if (userUuid) {
+          await supabase.from('notifications').delete().eq('user_id', userUuid);
+        }
+      } catch {
+        // ignore
+      }
+    }
+  };
+
   return (
     <AuthContext.Provider value={{
       schoolInfo,
@@ -1058,6 +1111,8 @@ export function AuthProvider({ children }) {
       deleteMeeting,
       addStaffMember,
       markAllNotificationsRead,
+      deleteNotification,
+      clearAllNotifications,
       // Живые тосты
       toast,
       showToast,

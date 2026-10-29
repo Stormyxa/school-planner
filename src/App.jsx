@@ -16,7 +16,7 @@ import TaskDetailModal from './components/TaskDetailModal';
 import NotificationToast from './components/NotificationToast';
 
 function AppContent() {
-  const { currentUser } = useAuth();
+  const { currentUser, tasks } = useAuth();
 
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem('sp_active_tab_kz43') || 'dashboard';
@@ -30,6 +30,55 @@ function AppContent() {
   const [isNewMeetingOpen, setIsNewMeetingOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [taskToSubmit, setTaskToSubmit] = useState(null);
+
+  // Открытие конкретной задачи по клику на уведомление (push, toast, bell или url)
+  const openTaskById = (taskId) => {
+    if (!taskId) return;
+    setActiveTab('tasks');
+    const found = tasks.find(t => t.id === taskId);
+    if (found) {
+      setSelectedTask(found);
+    } else {
+      setTimeout(() => {
+        const retry = tasks.find(t => t.id === taskId);
+        if (retry) setSelectedTask(retry);
+      }, 500);
+    }
+  };
+
+  useEffect(() => {
+    window.__openTaskFromNotification = openTaskById;
+    return () => {
+      delete window.__openTaskFromNotification;
+    };
+  }, [tasks]);
+
+  // Проверка параметров URL (?openTaskId=...&tab=tasks) при запуске приложения
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const openTaskId = params.get('openTaskId');
+    const tab = params.get('tab');
+    if (tab) {
+      setActiveTab(tab);
+    }
+    if (openTaskId) {
+      openTaskById(openTaskId);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [tasks]);
+
+  // Прием сообщений от Service Worker (при тапе по уведомлению в шторке смартфона)
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      const handleSwMessage = (event) => {
+        if (event.data?.type === 'NOTIFICATION_OPEN_TASK' && event.data?.taskId) {
+          openTaskById(event.data.taskId);
+        }
+      };
+      navigator.serviceWorker.addEventListener('message', handleSwMessage);
+      return () => navigator.serviceWorker.removeEventListener('message', handleSwMessage);
+    }
+  }, [tasks]);
 
   // Навигация клавишами 1-6 на ПК
   useEffect(() => {

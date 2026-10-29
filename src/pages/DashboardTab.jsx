@@ -13,22 +13,23 @@ import {
 } from 'lucide-react';
 
 export default function DashboardTab({ onSelectTask, onOpenNewTask, setActiveTab }) {
-  const { tasks, meetings, currentUser, isDirector, isHeadTeacher, t, schoolInfo } = useAuth();
+  const { tasks, meetings, currentUser, isDirector, isHeadTeacher, t, schoolInfo, isTaskArchived } = useAuth();
 
-  // Расчет статистики с исключением отмененных задач
-  const activeTasks = tasks.filter(t => t.status !== 'cancelled');
-  const totalTasks = activeTasks.length;
-  const pendingReview = activeTasks.filter(t => t.status === 'submitted').length;
-  const completedTasks = activeTasks.filter(t => t.status === 'completed').length;
+  // Расчет статистики: исключаем отмененные и архивные поручения
+  const unarchivedTasks = tasks.filter(t => t.status !== 'cancelled' && !isTaskArchived(t));
+  const activeTasks = unarchivedTasks;
+  const totalTasks = unarchivedTasks.length;
+  const pendingReview = unarchivedTasks.filter(t => t.status === 'submitted').length;
+  const completedTasks = unarchivedTasks.filter(t => t.status === 'completed').length;
   
   const todayStr = new Date().toISOString().split('T')[0];
-  const overdueTasks = activeTasks.filter(t => t.deadline < todayStr && t.status !== 'completed').length;
-  const urgentTasks = activeTasks.filter(t => t.priority === 'urgent' && t.status !== 'completed').length;
+  const overdueTasks = unarchivedTasks.filter(t => t.deadline < todayStr && t.status !== 'completed').length;
+  const urgentTasks = unarchivedTasks.filter(t => t.priority === 'urgent' && t.status !== 'completed').length;
 
   const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
-  // Мои задачи
-  const myTasks = activeTasks.filter(t => t.assignedToId === currentUser?.id);
+  // Мои активные задачи (без архивных)
+  const myTasks = unarchivedTasks.filter(t => t.assignedToId === currentUser?.id);
   const myPendingTasks = myTasks.filter(t => t.status !== 'completed');
 
   // Ближайшие встречи
