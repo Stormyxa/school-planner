@@ -100,15 +100,28 @@ export default function Header() {
               width: '38px',
               height: '38px',
               borderRadius: 'var(--radius-md)',
-              background: 'linear-gradient(135deg, #0284c7 0%, #1e3a8a 100%)',
-              color: '#fff',
+              backgroundColor: '#ffffff',
+              boxShadow: 'var(--shadow-sm)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: 'var(--shadow-sm)',
-              flexShrink: 0
+              padding: '2px',
+              border: '1px solid var(--border-subtle)',
+              flexShrink: 0,
+              overflow: 'hidden'
             }}>
-              <School size={20} />
+              <img 
+                src="/school43logo.png" 
+                alt="КГУ СШ №43" 
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  if (e.currentTarget.nextSibling) e.currentTarget.nextSibling.style.display = 'flex';
+                }}
+              />
+              <div style={{ display: 'none', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: 'linear-gradient(135deg, #0284c7 0%, #1e3a8a 100%)', color: '#fff', borderRadius: 'var(--radius-sm)' }}>
+                <School size={20} />
+              </div>
             </div>
             <div style={{ minWidth: 0, overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>

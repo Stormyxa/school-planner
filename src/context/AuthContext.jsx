@@ -395,6 +395,16 @@ export function AuthProvider({ children }) {
           }));
 
           setNotifications(prev => {
+            // Резервное уведомление: если в тихом фоне пришло новое непрочитанное
+            if (isSilent && prev.length > 0) {
+              const prevIds = new Set(prev.map(p => p.id));
+              const newlyArrived = mappedN.filter(n => !prevIds.has(n.id) && !n.read);
+              newlyArrived.slice(0, 3).forEach(n => {
+                showToast(n.title, n.message, n.type, n.taskId);
+                NotificationService.send(n.title, { body: n.message, taskId: n.taskId });
+              });
+            }
+
             // Оставляем только серверные уведомления (UUID id), удаляем дубликаты
             const map = new Map();
             mappedN.forEach(n => map.set(n.id, n));
@@ -417,7 +427,7 @@ export function AuthProvider({ children }) {
     } finally {
       if (!isSilent) setIsCloudSyncing(false);
     }
-  }, [resolveProfileUuid]);
+  }, [resolveProfileUuid, showToast]);
 
   // Запуск синхронизации при монтировании и при смене пользователя
   useEffect(() => {
@@ -441,10 +451,18 @@ export function AuthProvider({ children }) {
           s.id === current.id ||
           (s.login && s.login.toLowerCase() === current.login?.toLowerCase())
         );
-        const myUuid = me?.id || current.id || null;
+        const myUuid = me?.id || (isUuid(current.id) ? current.id : null);
 
-        // Уведомление предназначается ТОЛЬКО МНЕ (null user_id больше не используем)
-        if (myUuid && notif.user_id === myUuid) {
+        // Уведомление предназначается ТОЛЬКО МНЕ (проверяем все возможные идентификаторы)
+        const isTargetingMe = Boolean(
+          notif.user_id && (
+            notif.user_id === myUuid ||
+            notif.user_id === current.id ||
+            (me && notif.user_id === me.id)
+          )
+        );
+
+        if (isTargetingMe) {
           const taskId = notif.task_id || null;
           showToast(notif.title, notif.message, notif.type || 'task', taskId);
           NotificationService.send(notif.title, { body: notif.message, taskId });
@@ -580,16 +598,21 @@ export function AuthProvider({ children }) {
   // ОТПРАВКА УВЕДОМЛЕНИЙ АДРЕСАТАМ (БЕЗ ЭХО-КАМЕРЫ ДЛЯ АВТОРА ДЕЙСТВИЯ!)
   // ==========================================================================
   const dispatchNotification = async ({ targetUserId, targetRole, title, message, type = 'task', taskId = null }) => {
+    // Резолвим целевого пользователя и автора
+    const actorUuid = resolveProfileUuid(currentUser?.id || currentUser?.login);
+    const resolvedTargetUuid = targetUserId ? resolveProfileUuid(targetUserId) : null;
+
     // АВТОР ДЕЙСТВИЯ НИКОГДА НЕ ПОЛУЧАЕТ УВЕДОМЛЕНИЕ О СВОЕМ ЖЕ ДЕЙСТВИИ!
-    const isActorTheTarget = targetUserId && (
-      targetUserId === currentUser?.id || 
-      targetUserId === currentUser?.login
+    const isActorTheTarget = Boolean(
+      (resolvedTargetUuid && actorUuid && resolvedTargetUuid === actorUuid) ||
+      (targetUserId && (
+        targetUserId === currentUser?.id || 
+        targetUserId === currentUser?.login
+      ))
     );
 
     // === РЕЖИМ БЕЗ SUPABASE: локальный fallback ===
     if (!isSupabaseConfigured() || !supabase) {
-      // В локальном режиме показываем тост только если это НЕ наше действие
-      // (но для sender это нормально — он видит action confirmation через другие механизмы)
       return;
     }
 
@@ -597,9 +620,9 @@ export function AuthProvider({ children }) {
     try {
       if (targetUserId && !isActorTheTarget) {
         // Одному конкретному пользователю
-        const targetUuid = resolveProfileUuid(targetUserId);
+        const targetUuid = resolvedTargetUuid || (isUuid(targetUserId) ? targetUserId : null);
         if (!targetUuid) {
-          console.warn('[dispatchNotification] Cannot resolve UUID for:', targetUserId);
+          console.warn('[dispatchNotification] Cannot resolve UUID for target:', targetUserId);
           return;
         }
         const payload = {
@@ -619,12 +642,13 @@ export function AuthProvider({ children }) {
         // Всем сотрудникам, КРОМЕ автора действия!
         const otherStaff = staff.filter(s => {
           if (s.id === currentUser?.id || s.login === currentUser?.login) return false;
+          if (actorUuid && s.id === actorUuid) return false;
           return true;
         });
         const inserts = otherStaff
           .map(s => {
             const uuid = resolveProfileUuid(s.id || s.login);
-            if (!uuid) return null;
+            if (!uuid || (actorUuid && uuid === actorUuid)) return null;
             const item = { user_id: uuid, title, message, type, is_read: false };
             if (taskId && isUuid(taskId)) item.task_id = taskId;
             return item;
@@ -760,6 +784,8 @@ export function AuthProvider({ children }) {
 
     setTasks(prev => [newTask, ...prev]);
 
+    let createdTaskId = newTask.id;
+
     if (isSupabaseConfigured() && supabase) {
       try {
         const assignedUuid = resolveProfileUuid(newTask.assignedToId);
@@ -779,8 +805,7 @@ export function AuthProvider({ children }) {
           category: newTask.category
         }]).select().single();
 
-        let createdTaskId = newTask.id;
-        if (data) {
+        if (data && data.id) {
           createdTaskId = data.id;
           setTasks(prev => prev.map(t => t.id === newTask.id ? { ...t, id: data.id } : t));
         }
@@ -802,13 +827,12 @@ export function AuthProvider({ children }) {
 
   // Отмена поручения
   const cancelTask = async (taskId, reason) => {
-    let cancelledTaskTitle = '';
-    let targetAssignedId = null;
+    const targetTask = tasks.find(t => t.id === taskId);
+    const cancelledTaskTitle = targetTask?.title || 'Поручение';
+    const targetAssignedId = targetTask?.assignedToId || null;
 
     setTasks(prev => prev.map(t => {
       if (t.id === taskId) {
-        cancelledTaskTitle = t.title;
-        targetAssignedId = t.assignedToId;
         return {
           ...t,
           status: 'cancelled',
@@ -844,11 +868,11 @@ export function AuthProvider({ children }) {
 
   // Принятие задачи или возврат на доработку
   const updateTaskStatus = async (taskId, newStatus, extraData = {}) => {
-    let targetTask = null;
+    // 1. Ищем задачу ДО обновления state (надежный поиск)
+    let targetTask = tasks.find(t => t.id === taskId);
 
     setTasks(prev => prev.map(t => {
       if (t.id === taskId) {
-        targetTask = t;
         const updated = { ...t, status: newStatus, ...extraData };
         if (newStatus === 'completed') {
           try {
@@ -864,30 +888,50 @@ export function AuthProvider({ children }) {
 
     if (isSupabaseConfigured() && supabase) {
       try {
-        await supabase.from('tasks').update({
+        const updatePayload = {
           status: newStatus,
-          review_comment: extraData.reviewComment || null,
-          reviewed_at: extraData.reviewedAt || null
-        }).eq('id', taskId);
+          review_comment: extraData.reviewComment !== undefined ? extraData.reviewComment : null,
+          reviewed_at: extraData.reviewedAt || new Date().toISOString()
+        };
+        const { data: updatedDbTask } = await supabase
+          .from('tasks')
+          .update(updatePayload)
+          .eq('id', taskId)
+          .select()
+          .maybeSingle();
+
+        if (updatedDbTask && !targetTask) {
+          targetTask = {
+            id: updatedDbTask.id,
+            title: updatedDbTask.title,
+            assignedToId: updatedDbTask.assigned_to_id,
+            assignedToName: updatedDbTask.assigned_to_name,
+            createdById: updatedDbTask.created_by_id,
+            createdByName: updatedDbTask.created_by_name,
+            status: updatedDbTask.status
+          };
+        }
       } catch (err) {
         console.warn('Supabase updateTaskStatus error:', err.message);
       }
     }
 
-    if (targetTask?.assignedToId) {
+    // 2. Отправка уведомления адресату
+    const recipientUserId = targetTask?.assignedToId;
+    if (recipientUserId) {
       if (newStatus === 'completed') {
         dispatchNotification({
-          targetUserId: targetTask.assignedToId,
+          targetUserId: recipientUserId,
           title: 'Тапсырма қабылданды / Поручение принято',
-          message: `«${targetTask.title}» қабылданды. Жарайсыз! (Тексерген: ${currentUser?.name})`,
+          message: `«${targetTask?.title || 'Поручение'}» қабылданды. Жарайсыз! (Тексерген: ${currentUser?.name})`,
           type: 'task',
           taskId: taskId
         });
       } else if (newStatus === 'revision') {
         dispatchNotification({
-          targetUserId: targetTask.assignedToId,
+          targetUserId: recipientUserId,
           title: 'Қайта өңдеуге қайтарылды / На доработку',
-          message: `«${targetTask.title}». Ескерту: «${extraData.reviewComment || 'Қайта қарау қажет'}» (Тексерген: ${currentUser?.name})`,
+          message: `«${targetTask?.title || 'Поручение'}». Ескерту: «${extraData.reviewComment || 'Қайта қарау қажет'}» (Тексерген: ${currentUser?.name})`,
           type: 'task',
           taskId: taskId
         });
@@ -897,11 +941,10 @@ export function AuthProvider({ children }) {
 
   // Сдача отчета учителем
   const submitTaskReport = async (taskId, fileInfo, comment = '') => {
-    let targetTask = null;
+    const targetTask = tasks.find(t => t.id === taskId);
 
     setTasks(prev => prev.map(t => {
       if (t.id === taskId) {
-        targetTask = t;
         return {
           ...t,
           status: 'submitted',

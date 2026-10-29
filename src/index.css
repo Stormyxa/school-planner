@@ -513,3 +513,91 @@ input:focus, select:focus, textarea:focus {
   background-color: var(--bg-surface-subtle) !important;
 }
 
+/* ==========================================================================
+   СЕТКА НЕДЕЛИ ПЛАНЁРОК: 2x3 НА ДЕСКТОПЕ (3 КОЛОНКИ, 2 СТРОКИ), 1 КОЛОНКА НА ТЕЛЕФОНЕ
+   ========================================================================== */
+.planner-week-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)); /* Ровно 3 столбца x 2 строки = 6 дней недели (Пн-Сб) */
+  gap: 1.15rem;
+}
+
+.planner-day-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-height: 290px;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+}
+
+.planner-day-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.planner-day-card.today {
+  border: 2px solid var(--color-primary);
+  box-shadow: var(--shadow-md);
+  background: linear-gradient(180deg, var(--color-primary-bg) 0%, var(--bg-surface) 70px);
+}
+
+.planner-meeting-card {
+  padding: 0.85rem 0.95rem;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-primary-bg);
+  border-left: 4px solid var(--color-primary);
+  border-top: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.planner-meeting-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.planner-deadline-card {
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border-top: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.planner-deadline-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+@media (max-width: 960px) {
+  .planner-week-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .planner-week-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  .planner-day-card {
+    min-height: auto;
+    padding: 0.85rem;
+  }
+}
+

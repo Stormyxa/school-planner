@@ -5,7 +5,12 @@ import {
   PlusCircle, 
   CheckCircle2,
   XCircle,
-  Trash2 
+  Trash2,
+  Clock,
+  MapPin,
+  Users,
+  FileText,
+  CalendarCheck
 } from 'lucide-react';
 
 export default function PlannerTab({ onOpenNewMeeting, onSelectTask }) {
@@ -144,13 +149,9 @@ export default function PlannerTab({ onOpenNewMeeting, onSelectTask }) {
         </div>
       </div>
 
-      {/* РЕЖИМ 1: НЕДЕЛЯ */}
+      {/* РЕЖИМ 1: НЕДЕЛЯ — СЕТКА 2x3 НА ПК (3 СТОЛБЦА, 2 СТРОКИ) */}
       {viewMode === 'week' && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: '0.75rem'
-        }}>
+        <div className="planner-week-grid">
           {weekDays.map(day => {
             const dayMeetings = meetings.filter(m => m.date === day.dateStr && m.status !== 'cancelled');
             const dayDeadlines = tasks.filter(t => t.deadline === day.dateStr && t.status !== 'cancelled');
@@ -158,90 +159,137 @@ export default function PlannerTab({ onOpenNewMeeting, onSelectTask }) {
             return (
               <div 
                 key={day.dateStr}
-                style={{
-                  backgroundColor: 'var(--bg-surface)',
-                  border: day.isToday ? '2px solid var(--color-primary-light)' : '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '0.85rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.65rem',
-                  minHeight: '260px',
-                  boxShadow: day.isToday ? 'var(--shadow-md)' : 'var(--shadow-sm)'
-                }}
+                className={`planner-day-card ${day.isToday ? 'today' : ''}`}
               >
+                {/* Заголовок дня недели */}
                 <div style={{
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  paddingBottom: '0.5rem',
+                  paddingBottom: '0.65rem',
                   borderBottom: '1px solid var(--border-subtle)'
                 }}>
                   <div>
-                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: day.isToday ? 'var(--color-primary)' : 'var(--text-primary)' }}>
+                    <div style={{ 
+                      fontSize: '0.92rem', 
+                      fontWeight: 700, 
+                      color: day.isToday ? 'var(--color-primary)' : 'var(--text-primary)' 
+                    }}>
                       {day.name}
                     </div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
                       {day.dayNum} {day.monthStr}
                     </div>
                   </div>
                   {day.isToday && (
-                    <span className="badge badge-primary" style={{ fontSize: '0.65rem' }}>
-                      Бүгін
+                    <span className="badge badge-primary" style={{ fontSize: '0.7rem', padding: '0.2rem 0.6rem' }}>
+                      Бүгін / Сегодня
                     </span>
                   )}
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1 }}>
+                {/* Содержимое дня */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', flex: 1 }}>
                   {dayMeetings.length === 0 && dayDeadlines.length === 0 ? (
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', margin: 'auto 0' }}>
-                      Кездесулер жоқ
+                    <div style={{
+                      fontSize: '0.8rem',
+                      color: 'var(--text-muted)',
+                      textAlign: 'center',
+                      margin: 'auto 0',
+                      padding: '1.5rem 0.5rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      opacity: 0.7
+                    }}>
+                      <CalendarCheck size={26} />
+                      <span>Жоспар жоқ / Нет событий</span>
                     </div>
                   ) : null}
 
-                  {/* Карточки планёрок с возможностью удаления */}
+                  {/* Карточки планёрок с увеличенным визуалом */}
                   {dayMeetings.map(m => {
                     const canDelete = isDirector || m.leaderId === currentUser?.id || m.leader?.includes(currentUser?.name);
 
                     return (
                       <div 
                         key={m.id}
-                        style={{
-                          padding: '0.6rem',
-                          borderRadius: 'var(--radius-xs)',
-                          backgroundColor: 'var(--color-primary-bg)',
-                          borderLeft: '3px solid #0284c7',
-                          fontSize: '0.78rem',
-                          position: 'relative'
-                        }}
+                        className="planner-meeting-card"
                       >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div style={{ fontWeight: 600, color: 'var(--color-primary-dark)', flex: 1, paddingRight: '4px' }}>
-                            {m.title}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                            <span className="badge badge-primary" style={{ fontSize: '0.68rem', padding: '0.15rem 0.45rem' }}>
+                              {m.typeLabel || 'Планёрка'}
+                            </span>
                           </div>
                           {canDelete && (
                             <button
                               onClick={(e) => handleDeleteMeeting(e, m.id)}
                               style={{
-                                padding: '2px',
+                                padding: '3px',
                                 color: 'var(--color-danger)',
                                 background: 'transparent',
                                 border: 'none',
                                 cursor: 'pointer',
-                                opacity: 0.7
+                                opacity: 0.75,
+                                borderRadius: '4px'
                               }}
                               title={t('btnDeleteMeeting')}
                             >
-                              <Trash2 size={13} />
+                              <Trash2 size={14} />
                             </button>
                           )}
                         </div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-                          ⏰ {m.time}
+
+                        <div style={{ 
+                          fontWeight: 700, 
+                          color: 'var(--color-primary-dark)', 
+                          fontSize: '0.9rem',
+                          lineHeight: 1.35
+                        }}>
+                          {m.title}
                         </div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                          📍 {m.location}
+
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontWeight: 600 }}>
+                            <Clock size={13} color="var(--color-primary)" />
+                            {m.time}
+                          </span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                            <MapPin size={13} color="var(--text-muted)" />
+                            {m.location}
+                          </span>
                         </div>
+
+                        {m.leader && (
+                          <div style={{ 
+                            fontSize: '0.72rem', 
+                            color: 'var(--text-muted)', 
+                            display: 'inline-flex', 
+                            alignItems: 'center', 
+                            gap: '0.3rem' 
+                          }}>
+                            <Users size={12} />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {m.leader}
+                            </span>
+                          </div>
+                        )}
+
+                        {Array.isArray(m.agenda) && m.agenda.length > 0 && (
+                          <div style={{ 
+                            fontSize: '0.72rem', 
+                            color: 'var(--text-secondary)',
+                            backgroundColor: 'rgba(255, 255, 255, 0.6)',
+                            padding: '0.3rem 0.5rem',
+                            borderRadius: '4px',
+                            marginTop: '0.15rem'
+                          }}>
+                            <strong>Повестка:</strong> {m.agenda[0]}
+                            {m.agenda.length > 1 && <span style={{ color: 'var(--text-muted)' }}> (+{m.agenda.length - 1})</span>}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -251,23 +299,21 @@ export default function PlannerTab({ onOpenNewMeeting, onSelectTask }) {
                     <div
                       key={t.id}
                       onClick={() => onSelectTask(t)}
+                      className="planner-deadline-card"
                       style={{
-                        padding: '0.55rem',
-                        borderRadius: 'var(--radius-xs)',
                         backgroundColor: t.status === 'completed' ? 'var(--color-success-bg)' : 'var(--color-warning-bg)',
-                        borderLeft: `3px solid ${t.status === 'completed' ? 'var(--color-success)' : 'var(--color-warning)'}`,
-                        cursor: 'pointer',
-                        fontSize: '0.76rem'
+                        borderLeft: `4px solid ${t.status === 'completed' ? 'var(--color-success)' : 'var(--color-warning)'}`
                       }}
-                      title="Ашу үшін басыңыз"
+                      title="Ашу үшін басыңыз / Нажмите для просмотра"
                     >
-                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                        📎 Есеп мерзімі:
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600, fontSize: '0.78rem', color: 'var(--text-primary)' }}>
+                        <FileText size={13} color={t.status === 'completed' ? 'var(--color-success)' : 'var(--color-warning)'} />
+                        <span>Есеп мерзімі:</span>
                       </div>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '0.1rem' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3 }}>
                         {t.title}
                       </div>
-                      <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                         {t.assignedToName?.split(' ')[0]} {t.assignedToName?.split(' ')[1]?.[0]}.
                       </div>
                     </div>

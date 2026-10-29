@@ -59,18 +59,31 @@ export default function LoginScreen() {
         {/* Логотип школы */}
         <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
           <div style={{
-            width: '56px',
-            height: '56px',
+            width: '64px',
+            height: '64px',
             borderRadius: 'var(--radius-md)',
-            background: 'linear-gradient(135deg, #0284c7 0%, #1e3a8a 100%)',
-            color: '#fff',
+            backgroundColor: '#ffffff',
+            padding: '4px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             margin: '0 auto 0.75rem auto',
-            boxShadow: 'var(--shadow-md)'
+            boxShadow: 'var(--shadow-md)',
+            border: '1px solid var(--border-subtle)',
+            overflow: 'hidden'
           }}>
-            <School size={30} />
+            <img 
+              src="/school43logo.png" 
+              alt="КГУ СШ №43" 
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                if (e.currentTarget.nextSibling) e.currentTarget.nextSibling.style.display = 'flex';
+              }}
+            />
+            <div style={{ display: 'none', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: 'linear-gradient(135deg, #0284c7 0%, #1e3a8a 100%)', color: '#fff', borderRadius: 'var(--radius-sm)' }}>
+              <School size={30} />
+            </div>
           </div>
 
           <h2 style={{ fontSize: '1.3rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
