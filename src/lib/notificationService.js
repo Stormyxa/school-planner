@@ -1,5 +1,5 @@
 // ==========================================================================
-// СЕРВИС УВЕДОМЛЕНИЙ (WEB PUSH & IN-APP TOASTS)
+// СЕРВИС УВЕДОМЛЕНИЙ КГУ «СШ № 43» (WEB PUSH, PWA И СЕРВИС-ВОРКЕР)
 // ==========================================================================
 
 export const NotificationService = {
@@ -17,8 +17,12 @@ export const NotificationService = {
     }
 
     if (Notification.permission !== 'denied') {
-      const permission = await Notification.requestPermission();
-      return permission === 'granted';
+      try {
+        const permission = await Notification.requestPermission();
+        return permission === 'granted';
+      } catch {
+        return false;
+      }
     }
 
     return false;
@@ -33,21 +37,41 @@ export const NotificationService = {
   },
 
   /**
-   * Отправка системного уведомления
+   * Отправка системного уведомления (с поддержкой Service Worker для Android/Desktop)
    */
-  send(title, options = {}) {
-    if ('Notification' in window && Notification.permission === 'granted') {
+  async send(title, options = {}) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') {
+      return null;
+    }
+
+    const mergedOptions = {
+      icon: '/pwa-192x192.png',
+      badge: '/pwa-192x192.png',
+      vibrate: [200, 100, 200],
+      tag: options.tag || `school43-${Date.now()}`,
+      renotify: true,
+      ...options
+    };
+
+    // 1. Попытка через Service Worker (обязательно для Android PWA, где new Notification() запрещен)
+    if ('serviceWorker' in navigator) {
       try {
-        const notif = new Notification(title, {
-          icon: 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=128&auto=format&fit=crop&q=60',
-          badge: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏫</text></svg>',
-          ...options
-        });
-        return notif;
+        const registration = await navigator.serviceWorker.ready;
+        if (registration && registration.showNotification) {
+          await registration.showNotification(title, mergedOptions);
+          return true;
+        }
       } catch {
-        // Фоллбек при ограничениях Service Worker
+        // Fallback к обычному конструктору
       }
     }
-    return null;
+
+    // 2. Стандартный конструктор Notification для Desktop (Chrome, Edge, Safari, Firefox)
+    try {
+      return new Notification(title, mergedOptions);
+    } catch (e) {
+      console.warn('System notification fallback warning:', e);
+      return null;
+    }
   }
 };

@@ -1,7 +1,7 @@
 // ==========================================================================
-// КОНТЕКСТ АВТОРИЗАЦИИ И ЖИВОЙ СИНХРОНИЗАЦИИ КГУ «СШ № 43»
+// КОНТЕКСТ АВТОРИЗАЦИИ, ЖИВОЙ СИНХРОНИЗАЦИИ И PWA ДЛЯ КГУ «СШ № 43»
 // ==========================================================================
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { INITIAL_STAFF, INITIAL_TASKS, INITIAL_MEETINGS, INITIAL_NOTIFICATIONS, SCHOOL_INFO } from '../lib/mockData';
 import { NotificationService } from '../lib/notificationService';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
@@ -9,6 +9,9 @@ import { translations } from '../lib/translations';
 import confetti from 'canvas-confetti';
 
 const AuthContext = createContext();
+
+// Проверка валидности UUID для PostgreSQL
+const isUuid = (val) => Boolean(val && typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val));
 
 export function AuthProvider({ children }) {
   const [schoolInfo] = useState(SCHOOL_INFO);
@@ -18,9 +21,9 @@ export function AuthProvider({ children }) {
     return localStorage.getItem('sp_lang_kz43') || 'ru';
   });
 
-  const t = (key) => {
+  const t = useCallback((key) => {
     return translations[lang]?.[key] || translations['ru']?.[key] || key;
-  };
+  }, [lang]);
 
   const toggleLanguage = () => {
     setLang(prev => (prev === 'ru' ? 'kk' : 'ru'));
@@ -30,7 +33,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('sp_lang_kz43', lang);
   }, [lang]);
 
-  // 1. Сотрудники КГУ «СШ № 43» (сохраняются надежно в localStorage и Supabase)
+  // 1. Сотрудники КГУ «СШ № 43»
   const [staff, setStaff] = useState(() => {
     const saved = localStorage.getItem('sp_staff_kz43');
     if (saved) {
@@ -54,7 +57,7 @@ export function AuthProvider({ children }) {
         // fallback
       }
     }
-    return null; // По умолчанию экран входа
+    return null;
   });
 
   // 3. Задачи и поручения
@@ -81,8 +84,51 @@ export function AuthProvider({ children }) {
   });
 
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState(Date.now());
 
-  // Кэширование
+  // 7. PWA установка для десктопа и смартфонов
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isPwaInstalled, setIsPwaInstalled] = useState(false);
+
+  useEffect(() => {
+    const handleBeforeInstall = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setDeferredPrompt(null);
+      setIsPwaInstalled(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+      setIsPwaInstalled(true);
+    }
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const promptPwaInstall = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+        setIsPwaInstalled(true);
+      }
+      return { success: true, outcome };
+    }
+    const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    return { success: false, isIos, isInstalled: isPwaInstalled };
+  };
+
+  // Кэширование в LocalStorage
   useEffect(() => {
     localStorage.setItem('sp_staff_kz43', JSON.stringify(staff));
   }, [staff]);
@@ -112,56 +158,90 @@ export function AuthProvider({ children }) {
     localStorage.setItem('sp_theme', theme);
   }, [theme]);
 
-  // Загрузка данных из Supabase со слиянием (merge), чтобы сотрудники не затирались!
-  useEffect(() => {
+  // Поиск UUID пользователя в базе
+  const resolveProfileUuid = useCallback((idOrLogin) => {
+    if (!idOrLogin) return null;
+    if (isUuid(idOrLogin)) return idOrLogin;
+
+    const found = staff.find(s => 
+      s.id === idOrLogin || 
+      (s.login && s.login.toLowerCase() === String(idOrLogin).toLowerCase()) ||
+      (s.email && s.email.toLowerCase() === String(idOrLogin).toLowerCase())
+    );
+    if (found && isUuid(found.id)) {
+      return found.id;
+    }
+    return null;
+  }, [staff]);
+
+  // Ссылки для предотвращения гонок состояний
+  const staffRef = useRef(staff);
+  staffRef.current = staff;
+  const currentUserRef = useRef(currentUser);
+  currentUserRef.current = currentUser;
+
+  // ==========================================================================
+  // ГЛАВНАЯ ФУНКЦИЯ ДИНАМИЧЕСКОЙ СИНХРОНИЗАЦИИ С SUPABASE
+  // ==========================================================================
+  const loadFromSupabase = useCallback(async (isSilent = false) => {
     if (!isSupabaseConfigured() || !supabase) return;
 
-    let isMounted = true;
-    setIsCloudSyncing(true);
+    if (!isSilent) setIsCloudSyncing(true);
 
-    const loadFromSupabase = async () => {
-      try {
-        // 1. Профили
-        const { data: supaProfiles, error: profErr } = await supabase.from('profiles').select('*');
-        if (!profErr && supaProfiles && isMounted) {
-          const mappedStaff = supaProfiles.map(p => ({
-            id: p.id,
-            name: p.full_name,
-            role: p.role,
-            roleTitle: p.role_title,
-            subject: p.subject || '',
-            classLeader: p.class_leader || '',
-            email: p.email,
-            phone: p.phone || '',
-            login: p.login,
-            passHint: p.password_hash || 'school43kz',
-            avatar: p.avatar || p.full_name.split(' ').map(n => n[0]).slice(0, 2).join('')
-          }));
+    try {
+      // 1. Профили сотрудников
+      const { data: supaProfiles, error: profErr } = await supabase.from('profiles').select('*');
+      if (!profErr && supaProfiles && supaProfiles.length > 0) {
+        const mappedStaff = supaProfiles.map(p => ({
+          id: p.id,
+          name: p.full_name,
+          role: p.role,
+          roleTitle: p.role_title,
+          subject: p.subject || '',
+          classLeader: p.class_leader || '',
+          email: p.email,
+          phone: p.phone || '',
+          login: p.login,
+          passHint: p.password_hash || 'school43kz',
+          avatar: p.avatar || (p.full_name ? p.full_name.split(' ').map(n => n[0]).slice(0, 2).join('') : 'СШ')
+        }));
 
-          // Слияние Supabase профилей с локальными, чтобы новые не терялись!
-          setStaff(prev => {
-            const mapByLogin = new Map();
-            mappedStaff.forEach(m => mapByLogin.set(m.login.toLowerCase(), m));
-            prev.forEach(m => {
-              if (!mapByLogin.has(m.login.toLowerCase())) {
-                mapByLogin.set(m.login.toLowerCase(), m);
-              }
-            });
-            const merged = Array.from(mapByLogin.values());
-            localStorage.setItem('sp_staff_kz43', JSON.stringify(merged));
-            return merged;
+        setStaff(prev => {
+          const map = new Map();
+          mappedStaff.forEach(m => map.set(m.login.toLowerCase(), m));
+          prev.forEach(p => {
+            if (p.login && !map.has(p.login.toLowerCase())) {
+              map.set(p.login.toLowerCase(), p);
+            }
           });
+          const merged = Array.from(map.values());
+          localStorage.setItem('sp_staff_kz43', JSON.stringify(merged));
+          return merged;
+        });
 
-          if (currentUser) {
-            const fresh = mappedStaff.find(s => s.id === currentUser.id || s.login.toLowerCase() === currentUser.login.toLowerCase());
-            if (fresh) setCurrentUser(fresh);
+        // Обновляем текущего пользователя, если данные изменились
+        const current = currentUserRef.current;
+        if (current) {
+          const fresh = mappedStaff.find(s => s.id === current.id || (s.login && s.login.toLowerCase() === current.login?.toLowerCase()));
+          if (fresh && (fresh.name !== current.name || fresh.role !== current.role || fresh.roleTitle !== current.roleTitle)) {
+            setCurrentUser(fresh);
           }
         }
+      }
 
-        // 2. Задачи
-        const { data: supaTasks, error: taskErr } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
-        if (!taskErr && supaTasks && isMounted) {
-          const mappedTasks = supaTasks.map(t => ({
+      // 2. Задачи и поручения
+      const { data: supaTasks, error: taskErr } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
+      if (!taskErr && supaTasks) {
+        const mappedTasks = supaTasks.map(t => {
+          let submittedFile = null;
+          if (t.submitted_file) {
+            try {
+              submittedFile = typeof t.submitted_file === 'string' ? JSON.parse(t.submitted_file) : t.submitted_file;
+            } catch {
+              submittedFile = null;
+            }
+          }
+          return {
             id: t.id,
             title: t.title,
             description: t.description,
@@ -177,83 +257,133 @@ export function AuthProvider({ children }) {
             category: t.category,
             teacherComment: t.teacher_comment,
             reviewComment: t.review_comment,
-            submittedFile: t.submitted_file ? JSON.parse(t.submitted_file) : null
-          }));
-          setTasks(mappedTasks);
-        }
+            submittedFile
+          };
+        });
 
-        // 3. Планёрки
-        const { data: supaMeetings, error: meetErr } = await supabase.from('meetings').select('*').order('meeting_date', { ascending: true });
-        if (!meetErr && supaMeetings && isMounted) {
-          const mappedM = supaMeetings.map(m => ({
-            id: m.id,
-            title: m.title,
-            type: m.type,
-            typeLabel: m.type_label,
-            date: m.meeting_date,
-            time: m.meeting_time,
-            location: m.location,
-            leader: m.leader,
-            leaderId: m.leader_id,
-            agenda: Array.isArray(m.agenda) ? m.agenda : [],
-            status: m.status
-          }));
-          setMeetings(mappedM);
-        }
-
-        // 4. Уведомления текущего пользователя из Supabase
-        const savedUserStr = localStorage.getItem('sp_user_kz43');
-        const activeUserId = savedUserStr ? JSON.parse(savedUserStr)?.id : null;
-        if (activeUserId) {
-          const { data: supaNotifs, error: notifErr } = await supabase
-            .from('notifications')
-            .select('*')
-            .or(`user_id.eq.${activeUserId},user_id.is.null`)
-            .order('created_at', { ascending: false })
-            .limit(30);
-
-          if (!notifErr && supaNotifs && isMounted) {
-            const mappedN = supaNotifs.map(n => ({
-              id: n.id,
-              title: n.title,
-              message: n.message,
-              time: new Date(n.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-              read: n.is_read,
-              type: n.type
-            }));
-            setNotifications(mappedN);
-          }
-        }
-      } catch (err) {
-        console.warn('Supabase sync notice:', err.message);
-      } finally {
-        if (isMounted) setIsCloudSyncing(false);
+        // Сохраняем локальные оптимистичные задачи (id: task-...) пока они не появились в Supabase
+        setTasks(prev => {
+          const localOnly = prev.filter(p => typeof p.id === 'string' && p.id.startsWith('task-'));
+          const existingIds = new Set(mappedTasks.map(m => m.id));
+          const stillPending = localOnly.filter(l => !existingIds.has(l.id));
+          const combined = [...stillPending, ...mappedTasks];
+          localStorage.setItem('sp_tasks_kz43', JSON.stringify(combined));
+          return combined;
+        });
       }
-    };
 
-    loadFromSupabase();
+      // 3. Планёрки
+      const { data: supaMeetings, error: meetErr } = await supabase.from('meetings').select('*').order('meeting_date', { ascending: true });
+      if (!meetErr && supaMeetings) {
+        const mappedM = supaMeetings.map(m => ({
+          id: m.id,
+          title: m.title,
+          type: m.type,
+          typeLabel: m.type_label,
+          date: m.meeting_date,
+          time: m.meeting_time,
+          location: m.location,
+          leader: m.leader,
+          leaderId: m.leader_id,
+          agenda: Array.isArray(m.agenda) ? m.agenda : [],
+          status: m.status
+        }));
+
+        setMeetings(prev => {
+          const localOnly = prev.filter(p => typeof p.id === 'string' && p.id.startsWith('meet-'));
+          const existingIds = new Set(mappedM.map(m => m.id));
+          const stillPending = localOnly.filter(l => !existingIds.has(l.id));
+          const combined = [...stillPending, ...mappedM];
+          localStorage.setItem('sp_meetings_kz43', JSON.stringify(combined));
+          return combined;
+        });
+      }
+
+      // 4. Уведомления текущего пользователя
+      const activeUser = currentUserRef.current;
+      const userUuid = activeUser ? resolveProfileUuid(activeUser.id || activeUser.login) : null;
+
+      let notifQuery = supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(35);
+      if (userUuid) {
+        notifQuery = notifQuery.or(`user_id.eq.${userUuid},user_id.is.null`);
+      } else {
+        notifQuery = notifQuery.is('user_id', null);
+      }
+
+      const { data: supaNotifs, error: notifErr } = await notifQuery;
+      if (!notifErr && supaNotifs) {
+        const mappedN = supaNotifs.map(n => ({
+          id: n.id,
+          title: n.title,
+          message: n.message,
+          time: new Date(n.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+          read: n.is_read,
+          type: n.type || 'task'
+        }));
+
+        setNotifications(prev => {
+          // Объединяем, сохраняя локально полученные уведомления
+          const map = new Map();
+          mappedN.forEach(n => map.set(n.id, n));
+          prev.forEach(p => {
+            if (!map.has(p.id)) map.set(p.id, p);
+          });
+          const merged = Array.from(map.values());
+          localStorage.setItem('sp_notifications_kz43', JSON.stringify(merged));
+          return merged;
+        });
+      }
+
+      setLastSyncedAt(Date.now());
+    } catch (err) {
+      console.warn('Supabase dynamic sync notice:', err.message);
+    } finally {
+      if (!isSilent) setIsCloudSyncing(false);
+    }
+  }, [resolveProfileUuid]);
+
+  // Запуск синхронизации при монтировании и при смене пользователя
+  useEffect(() => {
+    loadFromSupabase(false);
+  }, [loadFromSupabase, currentUser?.id]);
+
+  // ЖИВОЕ ОБНОВЛЕНИЕ: Supabase Realtime Channels (WebSockets)
+  useEffect(() => {
+    if (!isSupabaseConfigured() || !supabase) return;
 
     const channel = supabase
       .channel('school_planner_realtime_kz')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
-        loadFromSupabase();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-        loadFromSupabase();
+        loadFromSupabase(true);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' }, () => {
-        loadFromSupabase();
+        loadFromSupabase(true);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+        loadFromSupabase(true);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => {
-        loadFromSupabase();
+        loadFromSupabase(true);
       })
       .subscribe();
 
     return () => {
-      isMounted = false;
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [loadFromSupabase]);
+
+  // НАДЕЖНЫЙ ФОЛЛБЕК-ПУЛИНГ: каждые 6-8 секунд проверяет изменения без перезагрузки страницы (F5)
+  useEffect(() => {
+    if (!isSupabaseConfigured() || !supabase) return;
+
+    const interval = setInterval(() => {
+      if (!document.hidden) {
+        loadFromSupabase(true);
+      }
+    }, 7000);
+
+    return () => clearInterval(interval);
+  }, [loadFromSupabase]);
 
   const toggleTheme = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
@@ -300,9 +430,11 @@ export function AuthProvider({ children }) {
               phone: data.phone || '',
               login: data.login,
               passHint: data.password_hash,
-              avatar: data.avatar || data.full_name.split(' ').map(n => n[0]).slice(0, 2).join('')
+              avatar: data.avatar || (data.full_name ? data.full_name.split(' ').map(n => n[0]).slice(0, 2).join('') : 'СШ')
             };
             setCurrentUser(userObj);
+            // Запрашиваем разрешение на уведомления после успешного входа
+            NotificationService.requestPermission();
             return { success: true };
           }
           return { success: false, error: t('loginError') };
@@ -313,10 +445,11 @@ export function AuthProvider({ children }) {
     }
 
     // 2. Локальная проверка
-    const user = staff.find(s => s.login.toLowerCase() === cleanLogin || s.email.toLowerCase() === cleanLogin);
+    const user = staff.find(s => s.login?.toLowerCase() === cleanLogin || s.email?.toLowerCase() === cleanLogin);
     if (user) {
       if (user.passHint === cleanPass || cleanPass === 'admin' || cleanPass === 'school43kz') {
         setCurrentUser(user);
+        NotificationService.requestPermission();
         return { success: true };
       }
       return { success: false, error: t('loginError') };
@@ -332,38 +465,54 @@ export function AuthProvider({ children }) {
 
   // Отправка уведомлений: строго адресату, без уведомления самого себя
   const dispatchNotification = async ({ targetUserId, targetRole, title, message, type = 'task' }) => {
-    // 1. В Supabase: сохраняем запись для адресатов
+    // Не уведомляем автора действия
+    if (targetUserId && targetUserId === currentUser?.id) {
+      return;
+    }
+
+    // 1. Запись в Supabase notifications
     if (isSupabaseConfigured() && supabase) {
       try {
         if (targetUserId) {
+          const targetUuid = resolveProfileUuid(targetUserId);
           await supabase.from('notifications').insert([{
-            user_id: targetUserId.includes('user-') ? null : targetUserId,
+            user_id: targetUuid,
             title,
             message,
             type,
             is_read: false
           }]);
         } else if (targetRole === 'all') {
-          // Отправка всем сотрудникам, кроме автора действия
-          const otherStaff = staff.filter(s => s.id !== currentUser?.id);
+          // Всем педагогам, кроме текущего
+          const otherStaff = staff.filter(s => s.id !== currentUser?.id && s.login !== currentUser?.login);
           const inserts = otherStaff.map(s => ({
-            user_id: s.id.includes('user-') ? null : s.id,
+            user_id: resolveProfileUuid(s.id || s.login),
             title,
             message,
             type,
             is_read: false
-          }));
+          })).filter(item => item.user_id !== null);
+
           if (inserts.length > 0) {
             await supabase.from('notifications').insert(inserts);
+          } else {
+            // Общее широковещательное уведомление
+            await supabase.from('notifications').insert([{
+              user_id: null,
+              title,
+              message,
+              type,
+              is_read: false
+            }]);
           }
         }
       } catch (err) {
-        console.warn('Supabase notification dispatch:', err.message);
+        console.warn('Supabase notification dispatch error:', err.message);
       }
     }
 
-    // 2. В локальном интерфейсе: добавляем уведомление ТОЛЬКО если оно адресовано текущему пользователю
-    if (targetUserId && targetUserId === currentUser?.id) {
+    // 2. Локальное уведомление в браузере (если целевой пользователь совпадает)
+    if (targetUserId && (targetUserId === currentUser?.id || targetUserId === currentUser?.login)) {
       const localNotif = {
         id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         title,
@@ -398,7 +547,8 @@ export function AuthProvider({ children }) {
 
       // Проверка задач текущего пользователя
       tasks.forEach(t => {
-        if (t.assignedToId === currentUser.id && t.status !== 'completed' && t.status !== 'cancelled') {
+        const isMyTask = t.assignedToId === currentUser.id || t.assignedToName?.includes(currentUser.name);
+        if (isMyTask && t.status !== 'completed' && t.status !== 'cancelled') {
           const deadlineDate = new Date(t.deadline);
           const deadlineMs = deadlineDate.getTime();
           const diffDays = Math.round((deadlineMs - todayMs) / (1000 * 60 * 60 * 24));
@@ -474,9 +624,9 @@ export function AuthProvider({ children }) {
     };
 
     checkDeadlinesAndMeetings();
-    const interval = setInterval(checkDeadlinesAndMeetings, 3 * 60 * 1000);
+    const interval = setInterval(checkDeadlinesAndMeetings, 2 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [currentUser?.id, tasks, meetings]);
+  }, [currentUser, tasks, meetings]);
 
   // Добавление задачи
   const addTask = async (taskData) => {
@@ -493,24 +643,32 @@ export function AuthProvider({ children }) {
 
     if (isSupabaseConfigured() && supabase) {
       try {
-        await supabase.from('tasks').insert([{
+        const assignedUuid = resolveProfileUuid(newTask.assignedToId);
+        const createdUuid = resolveProfileUuid(currentUser?.id);
+
+        const { data, error } = await supabase.from('tasks').insert([{
           title: newTask.title,
           description: newTask.description,
-          assigned_to_id: newTask.assignedToId?.includes('user-') ? null : newTask.assignedToId,
+          assigned_to_id: assignedUuid,
           assigned_to_name: newTask.assignedToName,
+          created_by_id: createdUuid,
           created_by_name: newTask.createdByName,
           priority: newTask.priority,
           deadline: newTask.deadline,
           status: 'todo',
           requires_file: newTask.requiresFile,
           category: newTask.category
-        }]);
+        }]).select().single();
+
+        if (data) {
+          setTasks(prev => prev.map(t => t.id === newTask.id ? { ...t, id: data.id } : t));
+        }
       } catch (err) {
         console.warn('Supabase insert task:', err.message);
       }
     }
 
-    // Уведомление отправляется исполнителю, а НЕ создателю!
+    // Уведомление исполнителю
     dispatchNotification({
       targetUserId: newTask.assignedToId,
       title: 'Жаңа тапсырма / Новое поручение',
@@ -521,7 +679,7 @@ export function AuthProvider({ children }) {
     return newTask;
   };
 
-  // Отмена поручения постановщиком
+  // Отмена поручения
   const cancelTask = async (taskId, reason) => {
     let cancelledTaskTitle = '';
     let targetAssignedId = null;
@@ -552,18 +710,17 @@ export function AuthProvider({ children }) {
       }
     }
 
-    // Уведомление получает исполнитель (не тот, кто отменил)
     if (targetAssignedId) {
       dispatchNotification({
         targetUserId: targetAssignedId,
         title: 'Тапсырманың күші жойылды / Поручение отменено',
-        message: `Поручение «${cancelledTaskTitle}» отменено директором. Причина: «${reason}»`,
+        message: `Поручение «${cancelledTaskTitle}» отменено руководством. Причина: «${reason}»`,
         type: 'task'
       });
     }
   };
 
-  // Обновление статуса задачи (Принятие или возврат на доработку)
+  // Принятие задачи или возврат на доработку
   const updateTaskStatus = async (taskId, newStatus, extraData = {}) => {
     let targetTask = null;
 
@@ -590,12 +747,11 @@ export function AuthProvider({ children }) {
           review_comment: extraData.reviewComment || null,
           reviewed_at: extraData.reviewedAt || null
         }).eq('id', taskId);
-      } catch {
-        // fallback
+      } catch (err) {
+        console.warn('Supabase updateTaskStatus error:', err.message);
       }
     }
 
-    // Уведомление отправляется исполнителю задачи
     if (targetTask?.assignedToId) {
       if (newStatus === 'completed') {
         dispatchNotification({
@@ -642,21 +798,20 @@ export function AuthProvider({ children }) {
           submitted_at: new Date().toISOString()
         }).eq('id', taskId);
 
-        if (fileInfo) {
+        if (fileInfo && isUuid(taskId)) {
           await supabase.from('task_files').insert([{
-            task_id: taskId.includes('task-') ? null : taskId,
+            task_id: taskId,
             file_name: fileInfo.name,
             file_size: fileInfo.size,
             download_url: fileInfo.url,
             storage_type: fileInfo.storageType || 'github'
           }]);
         }
-      } catch {
-        // fallback
+      } catch (err) {
+        console.warn('Supabase submit report error:', err.message);
       }
     }
 
-    // Уведомление отправляется создателю поручения (директору или завучу), не самому учителю!
     const recipientId = targetTask?.createdById || staff.find(s => s.role === 'director')?.id;
     if (recipientId && recipientId !== currentUser?.id) {
       dispatchNotification({
@@ -668,7 +823,7 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Добавление планёрки
+  // Назначение планёрки
   const addMeeting = async (meetingData) => {
     const newMeeting = {
       id: `meet-${Date.now()}`,
@@ -681,7 +836,8 @@ export function AuthProvider({ children }) {
 
     if (isSupabaseConfigured() && supabase) {
       try {
-        const { data, error } = await supabase.from('meetings').insert([{
+        const leaderUuid = resolveProfileUuid(currentUser?.id);
+        const { data } = await supabase.from('meetings').insert([{
           title: newMeeting.title,
           type: newMeeting.type,
           type_label: newMeeting.typeLabel,
@@ -689,7 +845,7 @@ export function AuthProvider({ children }) {
           meeting_time: newMeeting.time,
           location: newMeeting.location,
           leader: newMeeting.leader,
-          leader_id: currentUser?.id,
+          leader_id: leaderUuid,
           agenda: newMeeting.agenda,
           status: 'scheduled'
         }]).select().single();
@@ -697,12 +853,11 @@ export function AuthProvider({ children }) {
         if (data) {
           setMeetings(prev => prev.map(m => m.id === newMeeting.id ? { ...m, id: data.id } : m));
         }
-      } catch {
-        // fallback
+      } catch (err) {
+        console.warn('Supabase addMeeting error:', err.message);
       }
     }
 
-    // Уведомление получают все педагоги школы, КРОМЕ создателя!
     dispatchNotification({
       targetRole: 'all',
       title: 'Жаңа жиналыс / Назначена планёрка',
@@ -713,9 +868,12 @@ export function AuthProvider({ children }) {
     return newMeeting;
   };
 
-  // УДАЛЕНИЕ ПЛАНЁРКИ (СОЗДАТЕЛЕМ ИЛИ ДИРЕКТОРОМ)
+  // Удаление планёрки
   const deleteMeeting = async (meetingId) => {
+    let deletedTitle = '';
     setMeetings(prev => {
+      const target = prev.find(m => m.id === meetingId);
+      if (target) deletedTitle = target.title;
       const updated = prev.filter(m => m.id !== meetingId);
       localStorage.setItem('sp_meetings_kz43', JSON.stringify(updated));
       return updated;
@@ -728,24 +886,31 @@ export function AuthProvider({ children }) {
         console.warn('Supabase delete meeting error:', err.message);
       }
     }
+
+    if (deletedTitle) {
+      dispatchNotification({
+        targetRole: 'all',
+        title: 'Планёрканың күші жойылды / Планёрка отменена',
+        message: `«${deletedTitle}» жойылды.`,
+        type: 'meeting'
+      });
+    }
   };
 
-  // Добавление сотрудника (с надежным сохранением и в LocalStorage, и в Supabase)
+  // Добавление сотрудника
   const addStaffMember = async (memberData) => {
     const newMember = {
       id: `user-${Date.now()}`,
-      avatar: memberData.name.split(' ').map(n => n[0]).slice(0, 2).join(''),
+      avatar: memberData.name ? memberData.name.split(' ').map(n => n[0]).slice(0, 2).join('') : 'СШ',
       ...memberData
     };
 
-    // 1. Немедленно сохраняем локально, чтобы никогда не терялось при перезагрузке
     setStaff(prev => {
       const updated = [...prev, newMember];
       localStorage.setItem('sp_staff_kz43', JSON.stringify(updated));
       return updated;
     });
 
-    // 2. Записываем в Supabase
     if (isSupabaseConfigured() && supabase) {
       try {
         const { data, error } = await supabase.from('profiles').insert([{
@@ -764,7 +929,6 @@ export function AuthProvider({ children }) {
         if (error) {
           console.error('Ошибка добавления сотрудника в Supabase:', error.message);
         } else if (data) {
-          // Обновляем реальный UUID из Supabase
           setStaff(prev => {
             const updated = prev.map(s => s.id === newMember.id ? { ...s, id: data.id } : s);
             localStorage.setItem('sp_staff_kz43', JSON.stringify(updated));
@@ -779,8 +943,19 @@ export function AuthProvider({ children }) {
     return newMember;
   };
 
-  const markAllNotificationsRead = () => {
+  const markAllNotificationsRead = async () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const userUuid = resolveProfileUuid(currentUser?.id || currentUser?.login);
+        if (userUuid) {
+          await supabase.from('notifications').update({ is_read: true }).eq('user_id', userUuid);
+        }
+      } catch {
+        // fallback
+      }
+    }
   };
 
   return (
@@ -803,6 +978,8 @@ export function AuthProvider({ children }) {
       isHeadTeacher,
       isTeacher,
       isCloudSyncing,
+      lastSyncedAt,
+      refreshData: () => loadFromSupabase(false),
       switchUser,
       loginWithCredentials,
       logout,
@@ -813,7 +990,11 @@ export function AuthProvider({ children }) {
       addMeeting,
       deleteMeeting,
       addStaffMember,
-      markAllNotificationsRead
+      markAllNotificationsRead,
+      // PWA интеграция
+      deferredPrompt,
+      isPwaInstalled,
+      promptPwaInstall
     }}>
       {children}
     </AuthContext.Provider>

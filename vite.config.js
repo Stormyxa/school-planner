@@ -7,7 +7,8 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      injectRegister: 'auto',
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png'],
       manifest: {
         name: 'КГУ «СШ № 43» — Школьная Планёрка',
         short_name: 'СШ № 43',
@@ -15,7 +16,7 @@ export default defineConfig({
         theme_color: '#0284c7',
         background_color: '#0f172a',
         display: 'standalone',
-        display_override: ['window-controls-overlay', 'standalone', 'minimal-ui'],
+        orientation: 'any',
         start_url: '/',
         scope: '/',
         id: 'school-planner-kgu43',
@@ -25,25 +26,66 @@ export default defineConfig({
             name: 'Тапсырмалар / Поручения',
             short_name: 'Поручения',
             url: '/',
-            icons: [{ src: 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=192&auto=format&fit=crop&q=60', sizes: '192x192' }]
+            icons: [{ src: '/pwa-192x192.png', sizes: '192x192' }]
           },
           {
             name: 'Планёрка / Кездесулер',
             short_name: 'Планёрка',
             url: '/',
-            icons: [{ src: 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=192&auto=format&fit=crop&q=60', sizes: '192x192' }]
+            icons: [{ src: '/pwa-192x192.png', sizes: '192x192' }]
           }
         ],
         icons: [
           {
-            src: 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=192&auto=format&fit=crop&q=60',
+            src: '/pwa-192x192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           },
           {
-            src: 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=512&auto=format&fit=crop&q=60',
+            src: '/pwa-512x512.png',
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
+          },
+          {
+            src: '/pwa-maskable-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable'
+          }
+        ]
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-cache',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'gstatic-fonts-cache',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24 * 365
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
           }
         ]
       }

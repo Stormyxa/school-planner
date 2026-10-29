@@ -1,18 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { NotificationService } from '../lib/notificationService';
 import { 
   Bell, 
   Moon, 
   Sun, 
-  CheckCircle2, 
-  Smartphone,
-  School,
-  ExternalLink,
-  BookOpen,
-  Globe,
-  LogOut,
-  MonitorDown
+  School, 
+  ExternalLink, 
+  BookOpen, 
+  Globe, 
+  LogOut, 
+  MonitorDown,
+  RefreshCw,
+  Smartphone
 } from 'lucide-react';
 
 export default function Header() {
@@ -27,44 +27,22 @@ export default function Header() {
     logout,
     notifications,
     markAllNotificationsRead,
-    isCloudSyncing
+    isCloudSyncing,
+    refreshData,
+    deferredPrompt,
+    isPwaInstalled,
+    promptPwaInstall
   } = useAuth();
 
   const [showNotifMenu, setShowNotifMenu] = useState(false);
-  const [pushStatus, setPushStatus] = useState(NotificationService.getPermissionStatus());
-  const [deferredPrompt, setDeferredPrompt] = useState(null);
-  const [canInstallPwa, setCanInstallPwa] = useState(false);
-
-  useEffect(() => {
-    const handleBeforeInstall = (e) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setCanInstallPwa(true);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
-  }, []);
-
-  const handleInstallDesktop = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setCanInstallPwa(false);
-    }
-    setDeferredPrompt(null);
-  };
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const handleRequestPush = async () => {
-    const granted = await NotificationService.requestPermission();
-    setPushStatus(NotificationService.getPermissionStatus());
-    if (granted) {
-      NotificationService.send(schoolInfo.shortName, {
-        body: 'Уведомления включены! Вы будете вовремя узнавать о поручениях директора и сроках сдачи СОР/СОЧ.'
-      });
+  const handleInstallClick = async () => {
+    const res = await promptPwaInstall();
+    if (!res.success && res.isIos) {
+      setShowInstallGuide(true);
     }
   };
 
@@ -109,8 +87,9 @@ export default function Header() {
                 Планёрка • ҚР
               </span>
               {isCloudSyncing && (
-                <span className="badge badge-warning pulse" style={{ fontSize: '0.65rem' }}>
-                  Sync...
+                <span className="badge badge-warning pulse" style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  <RefreshCw size={10} className="pulse" />
+                  Live
                 </span>
               )}
             </div>
@@ -120,8 +99,18 @@ export default function Header() {
           </div>
         </div>
 
-        {/* Действия: Язык, Kundelik, Push, Тема, Уведомления, Профиль, Выход */}
+        {/* Действия: Язык, Kundelik, Установка PWA, Тема, Уведомления, Профиль, Выход */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {/* Кнопка ручной синхронизации */}
+          <button
+            onClick={() => refreshData()}
+            className="btn-ghost btn-icon hide-on-mobile"
+            title="Синхронизировать с базой Supabase"
+            style={{ padding: '0.4rem' }}
+          >
+            <RefreshCw size={16} className={isCloudSyncing ? 'pulse' : ''} />
+          </button>
+
           {/* Переключатель языка: 🇰🇿 ҚАЗ / 🇷🇺 РУС */}
           <button
             onClick={toggleLanguage}
@@ -153,29 +142,16 @@ export default function Header() {
             <ExternalLink size={11} style={{ opacity: 0.6 }} />
           </a>
 
-          {/* Кнопка установки Desktop PWA на ПК */}
-          {canInstallPwa && (
+          {/* Кнопка установки PWA на ПК / Смартфон */}
+          {!isPwaInstalled && (deferredPrompt || /iPad|iPhone|iPod|Android/.test(navigator.userAgent)) && (
             <button 
               className="btn-primary btn-sm"
-              onClick={handleInstallDesktop}
-              title={t('btnInstallDesktop')}
+              onClick={handleInstallClick}
+              title="Установить приложение на ПК или телефон"
               style={{ fontSize: '0.78rem', gap: '0.35rem', backgroundColor: '#0284c7' }}
             >
               <MonitorDown size={14} />
-              <span className="hide-on-mobile">{t('btnInstallDesktop')}</span>
-            </button>
-          )}
-
-          {/* Кнопка Push уведомлений */}
-          {pushStatus !== 'granted' && (
-            <button 
-              className="btn-secondary btn-sm hide-on-mobile"
-              onClick={handleRequestPush}
-              title="Включить браузерные пуш-уведомления"
-              style={{ fontSize: '0.8rem', gap: '0.35rem' }}
-            >
-              <Smartphone size={14} color="var(--color-primary)" />
-              {t('btnEnablePush')}
+              <span className="hide-on-mobile">{t('btnInstallDesktop') || 'Установить'}</span>
             </button>
           )}
 
@@ -257,7 +233,7 @@ export default function Header() {
                 <div style={{ maxHeight: '280px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   {notifications.length === 0 ? (
                     <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>
-                      Жаңа хабарлама жоқ
+                      Жаңа хабарлама жоқ / Нет уведомлений
                     </p>
                   ) : (
                     notifications.map(notif => (
@@ -285,7 +261,7 @@ export default function Header() {
             )}
           </div>
 
-          {/* Профиль текущего пользователя (Директор / Завуч / Учитель) */}
+          {/* Профиль текущего пользователя */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -319,6 +295,29 @@ export default function Header() {
           </div>
         </div>
       </div>
+
+      {/* Модальное окно инструкций по установке для iOS */}
+      {showInstallGuide && (
+        <div className="modal-backdrop" onClick={() => setShowInstallGuide(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '420px', padding: '1.5rem', textAlign: 'center' }}>
+            <div style={{ width: '48px', height: '48px', margin: '0 auto 1rem', borderRadius: '50%', backgroundColor: '#e0f2fe', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Smartphone size={26} />
+            </div>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.75rem' }}>
+              Установка на iPhone / iPad (iOS)
+            </h3>
+            <div style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', textAlign: 'left', lineHeight: 1.6, marginBottom: '1.25rem' }}>
+              1. Нажмите кнопку <strong>«Поделиться»</strong> (квадрат со стрелкой вверх) в нижней панели Safari.<br />
+              2. Прокрутите список вниз и выберите <strong>«На экран Домой»</strong> (+).<br />
+              3. Нажмите <strong>«Добавить»</strong> в правом верхнем углу.<br />
+              Иконка школы появится на рабочем столе вашего телефона!
+            </div>
+            <button className="btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowInstallGuide(false)}>
+              Понятно
+            </button>
+          </div>
+        </div>
+      )}
     </header>
   );
 }
