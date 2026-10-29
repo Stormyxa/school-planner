@@ -90,11 +90,43 @@ export default async function handler(req, res) {
       return handleCheckDeadlines(res);
     }
     if (action === 'debug') {
-      if (!supabase) return res.status(200).json({ error: 'Supabase client not initialized: check VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY / VITE_SUPABASE_ANON_KEY', supabaseUrl: Boolean(supabaseUrl), supabaseKey: Boolean(supabaseKey) });
-      const { data: subs, error: subErr } = await supabase.from('push_subscriptions').select('id, user_id, updated_at');
+      if (!supabase) return res.status(200).json({ error: 'Supabase client not initialized', supabaseUrl: Boolean(supabaseUrl), supabaseKey: Boolean(supabaseKey) });
+      const { data: rawSubs, error: subErr } = await supabase.from('push_subscriptions').select('id, user_id, endpoint, subscription, updated_at');
       const { data: profiles, error: profErr } = await supabase.from('profiles').select('id, login, full_name, role');
       const { data: notifs, error: notifErr } = await supabase.from('notifications').select('id, user_id, title, created_at').order('created_at', { ascending: false }).limit(5);
-      return res.status(200).json({ subs, subErr: subErr?.message, profiles, profErr: profErr?.message, notifs, notifErr: notifErr?.message });
+
+      // Показываем первые 80 символов эндпоинта для диагностики (без приватных ключей)
+      const subs = (rawSubs || []).map(s => ({
+        id: s.id,
+        user_id: s.user_id,
+        updated_at: s.updated_at,
+        endpoint_preview: s.endpoint ? s.endpoint.substring(0, 90) + (s.endpoint.length > 90 ? '...' : '') : 'MISSING',
+        has_keys: Boolean(s.subscription?.keys?.auth && s.subscription?.keys?.p256dh),
+        is_real: s.endpoint ? (s.endpoint.includes('googleapis.com') || s.endpoint.includes('fcm') || s.endpoint.includes('mozilla') || s.endpoint.includes('windows.com') || s.endpoint.includes('apple.com') || s.endpoint.includes('push.apple.com')) : false,
+      }));
+
+      return res.status(200).json({ subs, subErr: subErr?.message, profiles, profErr: profErr?.message, notifs, notifErr: notifErr?.message, vapidConfigured: Boolean(process.env.VAPID_PUBLIC_KEY) });
+    }
+    if (action === 'test-push') {
+      // Тестовый пуш с детальным отчётом по каждой подписке
+      if (!supabase) return res.status(200).json({ error: 'Supabase not configured' });
+      const targetId = req.query.userId;
+      let query = supabase.from('push_subscriptions').select('*');
+      if (targetId) query = query.eq('user_id', targetId);
+      const { data: subs } = await query;
+      if (!subs?.length) return res.status(200).json({ error: 'No subscriptions found', targetId });
+      const results = await Promise.allSettled(subs.map(async s => {
+        try {
+          await webpush.sendNotification(s.subscription, JSON.stringify({ title: 'Тест / Test', message: 'Пуш работает!', type: 'test', tag: 'school43-test-direct' }), { TTL: 60, urgency: 'high' });
+          return { id: s.id, user_id: s.user_id, endpoint: s.endpoint?.substring(0, 60), status: 'sent' };
+        } catch(err) {
+          if (err.statusCode === 404 || err.statusCode === 410) {
+            await supabase.from('push_subscriptions').delete().eq('id', s.id).catch(() => {});
+          }
+          return { id: s.id, user_id: s.user_id, endpoint: s.endpoint?.substring(0, 60), status: 'failed', code: err.statusCode, error: err.message };
+        }
+      }));
+      return res.status(200).json({ results: results.map(r => r.value || r.reason) });
     }
     return res.status(200).json({ status: 'ok', publicKey: vapidPublicKey });
   }
