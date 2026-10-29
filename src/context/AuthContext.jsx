@@ -371,39 +371,44 @@ export function AuthProvider({ children }) {
         });
       }
 
-      // 4. Уведомления текущего пользователя из Supabase
+      // 4. Уведомления текущего пользователя из Supabase (ТОЛЬКО свои — без null user_id)
       const activeUser = currentUserRef.current;
       const userUuid = activeUser ? resolveProfileUuid(activeUser.id || activeUser.login) : null;
 
-      let notifQuery = supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(20);
       if (userUuid) {
-        notifQuery = notifQuery.or(`user_id.eq.${userUuid},user_id.is.null`);
-      } else {
-        notifQuery = notifQuery.is('user_id', null);
-      }
+        const { data: supaNotifs, error: notifErr } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('user_id', userUuid)
+          .order('created_at', { ascending: false })
+          .limit(20);
 
-      const { data: supaNotifs, error: notifErr } = await notifQuery;
-      if (!notifErr && supaNotifs) {
-        const mappedN = supaNotifs.map(n => ({
-          id: n.id,
-          title: n.title,
-          message: n.message,
-          time: new Date(n.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-          read: n.is_read,
-          type: n.type || 'task',
-          taskId: n.task_id || null
-        }));
+        if (!notifErr && supaNotifs) {
+          const mappedN = supaNotifs.map(n => ({
+            id: n.id,
+            title: n.title,
+            message: n.message,
+            time: new Date(n.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+            read: n.is_read,
+            type: n.type || 'task',
+            taskId: n.task_id || null
+          }));
 
-        setNotifications(prev => {
-          const map = new Map();
-          mappedN.forEach(n => map.set(n.id, n));
-          prev.forEach(p => {
-            if (!map.has(p.id)) map.set(p.id, p);
+          setNotifications(prev => {
+            // Оставляем только серверные уведомления (UUID id), удаляем дубликаты
+            const map = new Map();
+            mappedN.forEach(n => map.set(n.id, n));
+            // Добавляем только локальные (не-UUID) которых ещё нет на сервере
+            prev.forEach(p => {
+              if (!map.has(p.id) && !/^[0-9a-f]{8}-[0-9a-f]{4}/.test(p.id)) {
+                map.set(p.id, p);
+              }
+            });
+            const merged = Array.from(map.values()).slice(0, 20);
+            localStorage.setItem('sp_notifications_kz43', JSON.stringify(merged));
+            return merged;
           });
-          const merged = Array.from(map.values()).slice(0, 20); // Лимит 20 последних
-          localStorage.setItem('sp_notifications_kz43', JSON.stringify(merged));
-          return merged;
-        });
+        }
       }
 
       setLastSyncedAt(Date.now());
@@ -429,13 +434,35 @@ export function AuthProvider({ children }) {
         const notif = payload.new;
         const current = currentUserRef.current;
         if (!current) return;
-        const myUuid = resolveProfileUuid(current.id || current.login);
 
-        // Уведомление предназначается МНЕ
-        if (notif.user_id === myUuid || notif.user_id === null) {
-          showToast(notif.title, notif.message, notif.type || 'task', notif.task_id);
-          NotificationService.send(notif.title, { body: notif.message, taskId: notif.task_id });
-          loadFromSupabase(true);
+        // Резолвим uuid через staffRef (надёжно — staff уже загружен к этому моменту)
+        const currentStaff = staffRef.current;
+        const me = currentStaff.find(s =>
+          s.id === current.id ||
+          (s.login && s.login.toLowerCase() === current.login?.toLowerCase())
+        );
+        const myUuid = me?.id || current.id || null;
+
+        // Уведомление предназначается ТОЛЬКО МНЕ (null user_id больше не используем)
+        if (myUuid && notif.user_id === myUuid) {
+          const taskId = notif.task_id || null;
+          showToast(notif.title, notif.message, notif.type || 'task', taskId);
+          NotificationService.send(notif.title, { body: notif.message, taskId });
+          // Добавляем уведомление прямо в state без полного reload
+          setNotifications(prev => {
+            const newNotif = {
+              id: notif.id,
+              title: notif.title,
+              message: notif.message,
+              time: new Date(notif.created_at || Date.now()).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+              read: false,
+              type: notif.type || 'task',
+              taskId
+            };
+            const updated = [newNotif, ...prev.filter(p => p.id !== notif.id)].slice(0, 20);
+            localStorage.setItem('sp_notifications_kz43', JSON.stringify(updated));
+            return updated;
+          });
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
@@ -447,12 +474,18 @@ export function AuthProvider({ children }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
         loadFromSupabase(true);
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[Realtime] Connected to school_planner_realtime_kz');
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('[Realtime] Connection issue:', status);
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [loadFromSupabase, resolveProfileUuid, showToast]);
+  }, [loadFromSupabase, showToast]);
 
   // Фоновый тихий опрос каждые 7 секунд (только когда страница открыта)
   useEffect(() => {
@@ -553,54 +586,58 @@ export function AuthProvider({ children }) {
       targetUserId === currentUser?.login
     );
 
-    // Запись в Supabase notifications для АДРЕСАТА (получателя)
-    if (isSupabaseConfigured() && supabase) {
-      try {
-        if (targetUserId && !isActorTheTarget) {
-          const targetUuid = resolveProfileUuid(targetUserId);
-          const payload = {
-            user_id: targetUuid,
-            title,
-            message,
-            type,
-            is_read: false
-          };
-          if (taskId && isUuid(taskId)) {
-            payload.task_id = taskId;
-          }
-          await supabase.from('notifications').insert([payload]);
-        } else if (targetRole === 'all') {
-          // Всем сотрудникам, КРОМЕ автора действия!
-          const otherStaff = staff.filter(s => s.id !== currentUser?.id && s.login !== currentUser?.login);
-          const inserts = otherStaff.map(s => {
-            const item = {
-              user_id: resolveProfileUuid(s.id || s.login),
-              title,
-              message,
-              type,
-              is_read: false
-            };
+    // === РЕЖИМ БЕЗ SUPABASE: локальный fallback ===
+    if (!isSupabaseConfigured() || !supabase) {
+      // В локальном режиме показываем тост только если это НЕ наше действие
+      // (но для sender это нормально — он видит action confirmation через другие механизмы)
+      return;
+    }
+
+    // === РЕЖИМ С SUPABASE: пишем в таблицу notifications ===
+    try {
+      if (targetUserId && !isActorTheTarget) {
+        // Одному конкретному пользователю
+        const targetUuid = resolveProfileUuid(targetUserId);
+        if (!targetUuid) {
+          console.warn('[dispatchNotification] Cannot resolve UUID for:', targetUserId);
+          return;
+        }
+        const payload = {
+          user_id: targetUuid,
+          title,
+          message,
+          type,
+          is_read: false
+        };
+        if (taskId && isUuid(taskId)) {
+          payload.task_id = taskId;
+        }
+        const { error } = await supabase.from('notifications').insert([payload]);
+        if (error) console.warn('[dispatchNotification] Insert error:', error.message);
+
+      } else if (targetRole === 'all') {
+        // Всем сотрудникам, КРОМЕ автора действия!
+        const otherStaff = staff.filter(s => {
+          if (s.id === currentUser?.id || s.login === currentUser?.login) return false;
+          return true;
+        });
+        const inserts = otherStaff
+          .map(s => {
+            const uuid = resolveProfileUuid(s.id || s.login);
+            if (!uuid) return null;
+            const item = { user_id: uuid, title, message, type, is_read: false };
             if (taskId && isUuid(taskId)) item.task_id = taskId;
             return item;
-          }).filter(item => item.user_id !== null);
+          })
+          .filter(Boolean);
 
-          if (inserts.length > 0) {
-            await supabase.from('notifications').insert(inserts);
-          } else {
-            const payload = {
-              user_id: null,
-              title,
-              message,
-              type,
-              is_read: false
-            };
-            if (taskId && isUuid(taskId)) payload.task_id = taskId;
-            await supabase.from('notifications').insert([payload]);
-          }
+        if (inserts.length > 0) {
+          const { error } = await supabase.from('notifications').insert(inserts);
+          if (error) console.warn('[dispatchNotification] Batch insert error:', error.message);
         }
-      } catch (err) {
-        console.warn('Supabase notification dispatch error:', err.message);
       }
+    } catch (err) {
+      console.warn('[dispatchNotification] Supabase error:', err.message);
     }
   };
 

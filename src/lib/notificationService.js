@@ -38,59 +38,63 @@ export const NotificationService = {
 
   /**
    * Отправка системного уведомления (с поддержкой Service Worker для Android/Desktop)
+   * ВАЖНО: options.taskId — ID поручения для перехода при тапе
    */
   async send(title, options = {}) {
     if (!('Notification' in window) || Notification.permission !== 'granted') {
       return null;
     }
 
-    const taskId = options.taskId || options.data?.taskId || null;
+    // Явно извлекаем taskId — не полагаемся на spread
+    const taskId = options.taskId || null;
+    const body = options.body || '';
     const targetUrl = taskId ? `/?openTaskId=${taskId}&tab=tasks` : '/';
 
-    const mergedOptions = {
+    // Формируем payload строго — data НЕ перезатирается
+    const notifOptions = {
+      body,
       icon: '/pwa-192x192.png',
-      badge: '/badge-96x96.png', // Прозрачный силуэтный бейдж (устраняет белый квадрат на Android!)
-      image: options.image || '/pwa-512x512.png', // Полноцветная картинка приложения в шторке Android
+      badge: '/badge-96x96.png',
+      image: '/pwa-512x512.png',
       vibrate: [250, 100, 250],
       tag: options.tag || `school43-${taskId || Date.now()}`,
       renotify: true,
+      requireInteraction: false,
       data: {
         url: targetUrl,
-        taskId,
-        tab: 'tasks',
-        ...options.data
-      },
-      ...options
+        taskId: taskId,
+        tab: 'tasks'
+      }
     };
 
-    // 1. Через Service Worker (надежно на смартфонах Android при свернутом приложении)
+    // 1. Через Service Worker (для Android/Desktop PWA — работает при свернутом приложении)
     if ('serviceWorker' in navigator) {
       try {
         const registration = await navigator.serviceWorker.ready;
         if (registration && registration.showNotification) {
-          await registration.showNotification(title, mergedOptions);
+          await registration.showNotification(title, notifOptions);
           return true;
         }
-      } catch {
-        // Fallback к обычному конструктору
+      } catch (swErr) {
+        console.warn('SW showNotification failed, fallback to Notification constructor:', swErr?.message);
       }
     }
 
-    // 2. Стандартный конструктор Notification для Desktop (Windows, macOS, Linux)
+    // 2. Fallback: стандартный конструктор Notification (Desktop Chrome/Firefox)
     try {
-      const notif = new Notification(title, mergedOptions);
+      const notif = new Notification(title, notifOptions);
       notif.onclick = function(e) {
         e.preventDefault();
         window.focus();
         if (taskId && window.__openTaskFromNotification) {
           window.__openTaskFromNotification(taskId);
-        } else if (targetUrl) {
+        } else {
           window.location.href = targetUrl;
         }
       };
       return notif;
     } catch (e) {
-      console.warn('System notification fallback warning:', e);
+      console.warn('Notification constructor failed:', e?.message);
       return null;
     }
   }
