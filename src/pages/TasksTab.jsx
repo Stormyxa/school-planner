@@ -18,13 +18,11 @@ export default function TasksTab({ onSelectTask, onOpenNewTask, onOpenSubmitRepo
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [showArchived, setShowArchived] = useState(false);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // 1. Ограничение видимости поручений по ролям:
-  // - Директор видит ВСЕ поручения
-  // - Завуч видит поручения свои (где автор или исполнитель) И поручения учителей
-  // - Учитель видит ТОЛЬКО свои поручения
+  // 1. Ограничение видимости поручений по ролям
   const visibleTasks = tasks.filter(task => {
     if (isDirector) return true;
 
@@ -39,8 +37,28 @@ export default function TasksTab({ onSelectTask, onOpenNewTask, onOpenSubmitRepo
     return task.assignedToId === currentUser?.id || task.createdById === currentUser?.id;
   });
 
+  // Корпоративный стандарт архивации: завершенные задания старше 24 часов
+  const isTaskArchived = (task) => {
+    if (task.status !== 'completed') return false;
+    const completedTime = task.reviewedAt ? new Date(task.reviewedAt).getTime() : new Date(task.deadline).getTime();
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    return (Date.now() - completedTime) >= oneDayMs;
+  };
+
+  const archivedTasksCount = visibleTasks.filter(t => isTaskArchived(t)).length;
+
   // 2. Фильтрация видимых поручений
   const filteredTasks = visibleTasks.filter(task => {
+    // Режим архива:
+    if (activeFilter === 'archive') {
+      if (!isTaskArchived(task)) return false;
+    } else {
+      // В обычных вкладках: архивные (> 24ч) скрыты, если не включен чекбокс showArchived
+      if (!showArchived && isTaskArchived(task)) {
+        return false;
+      }
+    }
+
     // Поиск
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           task.assignedToName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -111,13 +129,15 @@ export default function TasksTab({ onSelectTask, onOpenNewTask, onOpenSubmitRepo
     { id: 'pending', label: `Тексеруде / На проверке (${visibleTasks.filter(t => t.status === 'submitted').length})` },
     { id: 'revision', label: `Қайта өңдеуге (${visibleTasks.filter(t => t.status === 'revision').length})` },
     { id: 'urgent', label: `Шұғыл (${visibleTasks.filter(t => (t.priority === 'urgent' || t.deadline < todayStr) && t.status !== 'completed' && t.status !== 'cancelled').length})` },
-    { id: 'completed', label: `Орындалды (${visibleTasks.filter(t => t.status === 'completed').length})` }
+    { id: 'completed', label: `Орындалды (${visibleTasks.filter(t => t.status === 'completed' && !isTaskArchived(t)).length})` },
+    { id: 'archive', label: `📦 ${t('filterArchived')} (${archivedTasksCount})` }
   ] : [
     { id: 'all', label: `${t('filterAll')} (${visibleTasks.length})` },
     { id: 'my', label: `${t('filterMy')} (${visibleTasks.filter(t => t.assignedToId === currentUser?.id || t.createdById === currentUser?.id).length})` },
     { id: 'pending', label: `${t('filterPending')} (${visibleTasks.filter(t => t.status === 'submitted').length})` },
     { id: 'urgent', label: t('filterUrgent') },
-    { id: 'completed', label: t('filterCompleted') },
+    { id: 'completed', label: `${t('filterCompleted')} (${visibleTasks.filter(t => t.status === 'completed' && !isTaskArchived(t)).length})` },
+    { id: 'archive', label: `📦 ${t('filterArchived')} (${archivedTasksCount})` },
     { id: 'cancelled', label: `${t('filterCancelled')} (${visibleTasks.filter(t => t.status === 'cancelled').length})` }
   ];
 
@@ -186,9 +206,33 @@ export default function TasksTab({ onSelectTask, onOpenNewTask, onOpenSubmitRepo
           ))}
         </div>
 
-        {/* Поиск */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '280px' }}>
-          <div style={{ position: 'relative', width: '100%' }}>
+        {/* Поиск и тумблер показа архива */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {activeFilter !== 'archive' && archivedTasksCount > 0 && (
+            <label style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              fontSize: '0.78rem',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              userSelect: 'none',
+              backgroundColor: 'var(--bg-surface-subtle)',
+              padding: '0.35rem 0.6rem',
+              borderRadius: 'var(--radius-xs)',
+              border: '1px solid var(--border-subtle)'
+            }}>
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={e => setShowArchived(e.target.checked)}
+                style={{ width: 'auto', margin: 0 }}
+              />
+              <span>{t('showArchived')}</span>
+            </label>
+          )}
+
+          <div style={{ position: 'relative', width: '260px' }}>
             <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
             <input
               type="text"
@@ -216,6 +260,7 @@ export default function TasksTab({ onSelectTask, onOpenNewTask, onOpenSubmitRepo
             const isCancelled = task.status === 'cancelled';
             const isOverdue = !isCancelled && task.deadline < todayStr && task.status !== 'completed';
             const isAssignedToMe = task.assignedToId === currentUser?.id;
+            const isArchived = isTaskArchived(task);
 
             return (
               <div
@@ -230,13 +275,18 @@ export default function TasksTab({ onSelectTask, onOpenNewTask, onOpenSubmitRepo
                   gap: '1rem',
                   flexWrap: 'wrap',
                   borderLeft: isCancelled ? '4px solid #94a3b8' : isOverdue ? '4px solid var(--color-danger)' : undefined,
-                  opacity: isCancelled ? 0.75 : 1
+                  opacity: isCancelled ? 0.75 : isArchived ? 0.85 : 1
                 }}
               >
                 <div style={{ flex: 1, minWidth: '240px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
                     {getStatusBadge(task.status)}
                     {getPriorityBadge(task.priority)}
+                    {isArchived && (
+                      <span className="badge badge-neutral" style={{ fontSize: '0.7rem', backgroundColor: '#e2e8f0', color: '#475569' }}>
+                        📦 {t('taskArchivedBadge')}
+                      </span>
+                    )}
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                       • {task.category}
                     </span>

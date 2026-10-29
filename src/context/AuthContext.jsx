@@ -200,6 +200,30 @@ export function AuthProvider({ children }) {
           }));
           setMeetings(mappedM);
         }
+
+        // 4. Уведомления текущего пользователя из Supabase
+        const savedUserStr = localStorage.getItem('sp_user_kz43');
+        const activeUserId = savedUserStr ? JSON.parse(savedUserStr)?.id : null;
+        if (activeUserId) {
+          const { data: supaNotifs, error: notifErr } = await supabase
+            .from('notifications')
+            .select('*')
+            .or(`user_id.eq.${activeUserId},user_id.is.null`)
+            .order('created_at', { ascending: false })
+            .limit(30);
+
+          if (!notifErr && supaNotifs && isMounted) {
+            const mappedN = supaNotifs.map(n => ({
+              id: n.id,
+              title: n.title,
+              message: n.message,
+              time: new Date(n.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+              read: n.is_read,
+              type: n.type
+            }));
+            setNotifications(mappedN);
+          }
+        }
       } catch (err) {
         console.warn('Supabase sync notice:', err.message);
       } finally {
@@ -218,6 +242,9 @@ export function AuthProvider({ children }) {
         loadFromSupabase();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' }, () => {
+        loadFromSupabase();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => {
         loadFromSupabase();
       })
       .subscribe();
@@ -303,6 +330,154 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('sp_current_user_kz43');
   };
 
+  // Отправка уведомлений: строго адресату, без уведомления самого себя
+  const dispatchNotification = async ({ targetUserId, targetRole, title, message, type = 'task' }) => {
+    // 1. В Supabase: сохраняем запись для адресатов
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        if (targetUserId) {
+          await supabase.from('notifications').insert([{
+            user_id: targetUserId.includes('user-') ? null : targetUserId,
+            title,
+            message,
+            type,
+            is_read: false
+          }]);
+        } else if (targetRole === 'all') {
+          // Отправка всем сотрудникам, кроме автора действия
+          const otherStaff = staff.filter(s => s.id !== currentUser?.id);
+          const inserts = otherStaff.map(s => ({
+            user_id: s.id.includes('user-') ? null : s.id,
+            title,
+            message,
+            type,
+            is_read: false
+          }));
+          if (inserts.length > 0) {
+            await supabase.from('notifications').insert(inserts);
+          }
+        }
+      } catch (err) {
+        console.warn('Supabase notification dispatch:', err.message);
+      }
+    }
+
+    // 2. В локальном интерфейсе: добавляем уведомление ТОЛЬКО если оно адресовано текущему пользователю
+    if (targetUserId && targetUserId === currentUser?.id) {
+      const localNotif = {
+        id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        title,
+        message,
+        time: 'Только что',
+        read: false,
+        type
+      };
+      setNotifications(prev => [localNotif, ...prev]);
+      NotificationService.send(title, { body: message });
+    }
+  };
+
+  // Автоматический мониторинг дедлайнов и планёрок на сегодня/завтра
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const checkDeadlinesAndMeetings = () => {
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      const todayMs = new Date(todayStr).getTime();
+
+      let remindedKeys = new Set();
+      try {
+        const stored = sessionStorage.getItem('sp_reminded_keys_kz43');
+        if (stored) remindedKeys = new Set(JSON.parse(stored));
+      } catch {
+        // ignore
+      }
+
+      const newAlerts = [];
+
+      // Проверка задач текущего пользователя
+      tasks.forEach(t => {
+        if (t.assignedToId === currentUser.id && t.status !== 'completed' && t.status !== 'cancelled') {
+          const deadlineDate = new Date(t.deadline);
+          const deadlineMs = deadlineDate.getTime();
+          const diffDays = Math.round((deadlineMs - todayMs) / (1000 * 60 * 60 * 24));
+
+          if (diffDays < 0) {
+            const key = `overdue_${t.id}_${t.deadline}`;
+            if (!remindedKeys.has(key)) {
+              remindedKeys.add(key);
+              newAlerts.push({
+                id: `alert-${Date.now()}-${t.id}`,
+                title: '⚠️ Мерзімі өтті! / Срок поручения истек',
+                message: `«${t.title}» бойынша дедлайн (${t.deadline}) өтіп кетті. Шұғыл есеп тапсырыңыз!`,
+                time: 'Только что',
+                read: false,
+                type: 'urgent'
+              });
+            }
+          } else if (diffDays === 0) {
+            const key = `due_today_${t.id}_${t.deadline}`;
+            if (!remindedKeys.has(key)) {
+              remindedKeys.add(key);
+              newAlerts.push({
+                id: `alert-${Date.now()}-${t.id}`,
+                title: '⏰ Бүгін дедлайн / Срок сдачи сегодня',
+                message: `«${t.title}» — бүгін соңғы мерзім! Есепті тапсыруды ұмытпаңыз.`,
+                time: 'Только что',
+                read: false,
+                type: 'urgent'
+              });
+            }
+          } else if (diffDays === 1) {
+            const key = `due_tomorrow_${t.id}_${t.deadline}`;
+            if (!remindedKeys.has(key)) {
+              remindedKeys.add(key);
+              newAlerts.push({
+                id: `alert-${Date.now()}-${t.id}`,
+                title: '⏳ 1 күн қалды / До дедлайна 1 день',
+                message: `«${t.title}» ертеңге дейін тапсырылуы тиіс.`,
+                time: 'Только что',
+                read: false,
+                type: 'task'
+              });
+            }
+          }
+        }
+      });
+
+      // Проверка планёрок на сегодня
+      meetings.forEach(m => {
+        if (m.date === todayStr && m.status !== 'cancelled') {
+          const key = `meet_today_${m.id}_${m.date}`;
+          if (!remindedKeys.has(key)) {
+            remindedKeys.add(key);
+            newAlerts.push({
+              id: `alert-${Date.now()}-${m.id}`,
+              title: '🔔 Бүгін планёрка / Сегодня планёрка',
+              message: `«${m.title}» сағат ${m.time}-де (${m.location}). Барлық қатысушылар жиналуы тиіс.`,
+              time: 'Только что',
+              read: false,
+              type: 'meeting'
+            });
+          }
+        }
+      });
+
+      if (newAlerts.length > 0) {
+        setNotifications(prev => [...newAlerts, ...prev]);
+        newAlerts.forEach(alert => {
+          NotificationService.send(alert.title, { body: alert.message });
+        });
+        sessionStorage.setItem('sp_reminded_keys_kz43', JSON.stringify(Array.from(remindedKeys)));
+      }
+    };
+
+    checkDeadlinesAndMeetings();
+    const interval = setInterval(checkDeadlinesAndMeetings, 3 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [currentUser?.id, tasks, meetings]);
+
   // Добавление задачи
   const addTask = async (taskData) => {
     const newTask = {
@@ -335,15 +510,13 @@ export function AuthProvider({ children }) {
       }
     }
 
-    const newNotif = {
-      id: `notif-${Date.now()}`,
+    // Уведомление отправляется исполнителю, а НЕ создателю!
+    dispatchNotification({
+      targetUserId: newTask.assignedToId,
       title: 'Жаңа тапсырма / Новое поручение',
-      message: `${currentUser?.name}: «${newTask.title}»`,
-      time: 'Только что',
-      read: false,
+      message: `${currentUser?.name}: «${newTask.title}» (мерзімі: ${new Date(newTask.deadline).toLocaleDateString('ru-RU')})`,
       type: 'task'
-    };
-    setNotifications(prev => [newNotif, ...prev]);
+    });
 
     return newTask;
   };
@@ -351,10 +524,12 @@ export function AuthProvider({ children }) {
   // Отмена поручения постановщиком
   const cancelTask = async (taskId, reason) => {
     let cancelledTaskTitle = '';
+    let targetAssignedId = null;
 
     setTasks(prev => prev.map(t => {
       if (t.id === taskId) {
         cancelledTaskTitle = t.title;
+        targetAssignedId = t.assignedToId;
         return {
           ...t,
           status: 'cancelled',
@@ -377,25 +552,24 @@ export function AuthProvider({ children }) {
       }
     }
 
-    const cancelNotif = {
-      id: `notif-${Date.now()}`,
-      title: 'Тапсырманың күші жойылды / Поручение отменено',
-      message: `Поручение «${cancelledTaskTitle}» отменено директором. Причина: «${reason}»`,
-      time: 'Только что',
-      read: false,
-      type: 'task'
-    };
-    setNotifications(prev => [cancelNotif, ...prev]);
-
-    NotificationService.send('Поручение отменено', {
-      body: `«${cancelledTaskTitle}» отменено: ${reason}`
-    });
+    // Уведомление получает исполнитель (не тот, кто отменил)
+    if (targetAssignedId) {
+      dispatchNotification({
+        targetUserId: targetAssignedId,
+        title: 'Тапсырманың күші жойылды / Поручение отменено',
+        message: `Поручение «${cancelledTaskTitle}» отменено директором. Причина: «${reason}»`,
+        type: 'task'
+      });
+    }
   };
 
-  // Обновление статуса задачи
+  // Обновление статуса задачи (Принятие или возврат на доработку)
   const updateTaskStatus = async (taskId, newStatus, extraData = {}) => {
+    let targetTask = null;
+
     setTasks(prev => prev.map(t => {
       if (t.id === taskId) {
+        targetTask = t;
         const updated = { ...t, status: newStatus, ...extraData };
         if (newStatus === 'completed') {
           try {
@@ -420,12 +594,34 @@ export function AuthProvider({ children }) {
         // fallback
       }
     }
+
+    // Уведомление отправляется исполнителю задачи
+    if (targetTask?.assignedToId) {
+      if (newStatus === 'completed') {
+        dispatchNotification({
+          targetUserId: targetTask.assignedToId,
+          title: 'Тапсырма қабылданды / Поручение принято',
+          message: `«${targetTask.title}» қабылданды. Жарайсыз! (Тексерген: ${currentUser?.name})`,
+          type: 'task'
+        });
+      } else if (newStatus === 'revision') {
+        dispatchNotification({
+          targetUserId: targetTask.assignedToId,
+          title: 'Қайта өңдеуге қайтарылды / На доработку',
+          message: `«${targetTask.title}». Ескерту: «${extraData.reviewComment || 'Қайта қарау қажет'}» (Тексерген: ${currentUser?.name})`,
+          type: 'task'
+        });
+      }
+    }
   };
 
   // Сдача отчета учителем
   const submitTaskReport = async (taskId, fileInfo, comment = '') => {
+    let targetTask = null;
+
     setTasks(prev => prev.map(t => {
       if (t.id === taskId) {
+        targetTask = t;
         return {
           ...t,
           status: 'submitted',
@@ -460,19 +656,16 @@ export function AuthProvider({ children }) {
       }
     }
 
-    const newNotif = {
-      id: `notif-${Date.now()}`,
-      title: 'Есеп тексеруге жіберілді / Отчет сдан',
-      message: `${currentUser?.name} сдал(а) отчет по задаче`,
-      time: 'Только что',
-      read: false,
-      type: 'file'
-    };
-    setNotifications(prev => [newNotif, ...prev]);
-
-    NotificationService.send('Отчет сдан', {
-      body: `${currentUser?.name} прикрепил(а) документ на проверку.`
-    });
+    // Уведомление отправляется создателю поручения (директору или завучу), не самому учителю!
+    const recipientId = targetTask?.createdById || staff.find(s => s.role === 'director')?.id;
+    if (recipientId && recipientId !== currentUser?.id) {
+      dispatchNotification({
+        targetUserId: recipientId,
+        title: 'Есеп тексеруге жіберілді / Отчет сдан',
+        message: `${currentUser?.name} сдал(а) отчет по задаче «${targetTask?.title || 'Поручение'}»`,
+        type: 'file'
+      });
+    }
   };
 
   // Добавление планёрки
@@ -509,15 +702,13 @@ export function AuthProvider({ children }) {
       }
     }
 
-    const notif = {
-      id: `notif-${Date.now()}`,
+    // Уведомление получают все педагоги школы, КРОМЕ создателя!
+    dispatchNotification({
+      targetRole: 'all',
       title: 'Жаңа жиналыс / Назначена планёрка',
-      message: `${newMeeting.title} (${newMeeting.date})`,
-      time: 'Только что',
-      read: false,
+      message: `«${newMeeting.title}» • ${newMeeting.date} күні сағат ${newMeeting.time}-де (${newMeeting.location})`,
       type: 'meeting'
-    };
-    setNotifications(prev => [notif, ...prev]);
+    });
 
     return newMeeting;
   };

@@ -34,6 +34,7 @@ export const translations = {
     btnSubmitReport: 'Сдать отчет',
     btnAcceptReport: 'Принять отчет',
     btnRejectReport: 'На доработку',
+    btnReturnToRevision: 'Вернуть на доработку',
     btnCancelTask: 'Отменить поручение',
     btnConfirmCancel: 'Подтвердить отмену',
     btnSave: 'Сохранить',
@@ -44,6 +45,10 @@ export const translations = {
     btnAddStaff: 'Добавить педагога',
     btnTestDb: 'Проверить связь с базой Supabase',
     btnEnablePush: 'Включить пуши',
+    btnInstallDesktop: 'Установить на ПК',
+    filterArchived: 'Архив (> 24ч)',
+    showArchived: 'Показать архивные задачи (> 24ч)',
+    taskArchivedBadge: 'В архиве',
 
     // Статусы задач
     statusTodo: 'К исполнению',
@@ -142,6 +147,7 @@ export const translations = {
     btnSubmitReport: 'Есепті тапсыру',
     btnAcceptReport: 'Есепті қабылдау',
     btnRejectReport: 'Қайта өңдеуге',
+    btnReturnToRevision: 'Қайта өңдеуге қайтару',
     btnCancelTask: 'Тапсырманың күшін жою',
     btnConfirmCancel: 'Күшін жоюды растау',
     btnSave: 'Сақтау',
@@ -152,6 +158,10 @@ export const translations = {
     btnAddStaff: 'Педагогті қосу',
     btnTestDb: 'Supabase базасымен байланысты тексеру',
     btnEnablePush: 'Хабарламаны қосу',
+    btnInstallDesktop: 'Компьютерге орнату',
+    filterArchived: 'Мұрағат (> 24сағ)',
+    showArchived: 'Мұрағатталған тапсырмаларды көрсету (> 24сағ)',
+    taskArchivedBadge: 'Мұрағатта',
 
     // Статусы задач
     statusTodo: 'Орындауға',

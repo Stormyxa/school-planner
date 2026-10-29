@@ -15,7 +15,25 @@ export default defineConfig({
         theme_color: '#0284c7',
         background_color: '#0f172a',
         display: 'standalone',
-        orientation: 'portrait',
+        display_override: ['window-controls-overlay', 'standalone', 'minimal-ui'],
+        start_url: '/',
+        scope: '/',
+        id: 'school-planner-kgu43',
+        categories: ['education', 'productivity', 'business'],
+        shortcuts: [
+          {
+            name: 'Тапсырмалар / Поручения',
+            short_name: 'Поручения',
+            url: '/',
+            icons: [{ src: 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=192&auto=format&fit=crop&q=60', sizes: '192x192' }]
+          },
+          {
+            name: 'Планёрка / Кездесулер',
+            short_name: 'Планёрка',
+            url: '/',
+            icons: [{ src: 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=192&auto=format&fit=crop&q=60', sizes: '192x192' }]
+          }
+        ],
         icons: [
           {
             src: 'https://images.unsplash.com/photo-1580582932707-520aed937b7b?w=192&auto=format&fit=crop&q=60',

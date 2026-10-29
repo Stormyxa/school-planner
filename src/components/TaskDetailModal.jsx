@@ -324,20 +324,35 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
           </div>
 
           <div style={{ display: 'flex', gap: '0.6rem' }}>
-            {canReview && task.status === 'submitted' && !showRejectInput && (
+            {canReview && !showRejectInput && (
               <>
-                <button 
-                  className="btn-secondary" 
-                  style={{ color: 'var(--color-danger)' }}
-                  onClick={() => setShowRejectInput(true)}
-                >
-                  <RotateCcw size={16} />
-                  {t('btnRejectReport')}
-                </button>
-                <button className="btn-success" onClick={handleAccept}>
-                  <CheckCircle2 size={16} />
-                  {t('btnAcceptReport')}
-                </button>
+                {task.status === 'submitted' && (
+                  <>
+                    <button 
+                      className="btn-secondary" 
+                      style={{ color: 'var(--color-danger)' }}
+                      onClick={() => setShowRejectInput(true)}
+                    >
+                      <RotateCcw size={16} />
+                      {t('btnRejectReport')}
+                    </button>
+                    <button className="btn-success" onClick={handleAccept}>
+                      <CheckCircle2 size={16} />
+                      {t('btnAcceptReport')}
+                    </button>
+                  </>
+                )}
+                {task.status === 'completed' && (
+                  <button 
+                    className="btn-secondary" 
+                    style={{ color: 'var(--color-danger)', borderColor: '#fca5a5' }}
+                    onClick={() => setShowRejectInput(true)}
+                    title="Қайта өңдеуге қайтару / Вернуть на доработку"
+                  >
+                    <RotateCcw size={16} />
+                    {t('btnReturnToRevision')}
+                  </button>
+                )}
               </>
             )}
             <button className="btn-secondary" onClick={onClose}>

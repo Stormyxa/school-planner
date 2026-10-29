@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { NotificationService } from '../lib/notificationService';
 import { 
@@ -11,7 +11,8 @@ import {
   ExternalLink,
   BookOpen,
   Globe,
-  LogOut
+  LogOut,
+  MonitorDown
 } from 'lucide-react';
 
 export default function Header() {
@@ -31,6 +32,29 @@ export default function Header() {
 
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const [pushStatus, setPushStatus] = useState(NotificationService.getPermissionStatus());
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [canInstallPwa, setCanInstallPwa] = useState(false);
+
+  useEffect(() => {
+    const handleBeforeInstall = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setCanInstallPwa(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+  }, []);
+
+  const handleInstallDesktop = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setCanInstallPwa(false);
+    }
+    setDeferredPrompt(null);
+  };
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -128,6 +152,19 @@ export default function Header() {
             Kundelik.kz
             <ExternalLink size={11} style={{ opacity: 0.6 }} />
           </a>
+
+          {/* Кнопка установки Desktop PWA на ПК */}
+          {canInstallPwa && (
+            <button 
+              className="btn-primary btn-sm"
+              onClick={handleInstallDesktop}
+              title={t('btnInstallDesktop')}
+              style={{ fontSize: '0.78rem', gap: '0.35rem', backgroundColor: '#0284c7' }}
+            >
+              <MonitorDown size={14} />
+              <span className="hide-on-mobile">{t('btnInstallDesktop')}</span>
+            </button>
+          )}
 
           {/* Кнопка Push уведомлений */}
           {pushStatus !== 'granted' && (
