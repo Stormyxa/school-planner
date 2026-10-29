@@ -30,7 +30,7 @@ const dedupeCache = new Map();
 function isDuplicate(key) {
   const now = Date.now();
   for (const [k, timestamp] of dedupeCache.entries()) {
-    if (now - timestamp > 60000) dedupeCache.delete(k);
+    if (now - timestamp > 5000) dedupeCache.delete(k);
   }
   if (dedupeCache.has(key)) return true;
   dedupeCache.set(key, now);
@@ -179,11 +179,10 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing title' });
   }
 
-  // Защита от дубликатов: проверяем окно 30 секунд
-  const dedupeKey = notifId || `${rawTarget || targetRole || 'all'}_${taskId || 'none'}_${title}`;
-  if (isDuplicate(dedupeKey)) {
-    console.log(`[push] Suppressed duplicate push within 30s window: ${dedupeKey}`);
-    return res.status(200).json({ sent: 0, duplicate: true, reason: 'Duplicate suppressed' });
+  // Защита от эха вебхука: подавляем только если ровно один и тот же notifId пришел дважды за 5 секунд
+  if (type !== 'test' && notifId && isDuplicate(`notif_${notifId}`)) {
+    console.log(`[push] Suppressed duplicate webhook event for notifId: ${notifId}`);
+    return res.status(200).json({ sent: 0, duplicate: true, reason: 'Duplicate event suppressed' });
   }
 
   if (!supabase) {

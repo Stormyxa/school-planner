@@ -52,7 +52,12 @@ export function AuthProvider({ children }) {
     const saved = localStorage.getItem('sp_current_user_kz43');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed.id === 'user-director-1') {
+          parsed.id = 'bfbebd7a-7252-44f3-af04-8ec2ade217fa';
+          localStorage.setItem('sp_current_user_kz43', JSON.stringify(parsed));
+        }
+        return parsed;
       } catch {
         // fallback
       }
@@ -753,26 +758,10 @@ export function AuthProvider({ children }) {
         }
       }
 
-      // 3. Отправляем настоящий W3C Web Push (FCM / APNs) для доставки на выключенные экраны и закрытые браузеры
-      try {
-        const targetIdentifier = resolvedTargetUuid || targetUserId;
-        fetch('/api/push', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            targetUserId: targetIdentifier,
-            targetRole,
-            excludeUserId: actorUuid || currentUser?.id,
-            title,
-            message,
-            taskId,
-            type,
-            tag: taskId ? `school43-task-${taskId}` : undefined
-          })
-        }).catch(() => {});
-      } catch {
-        // ignore
-      }
+      // Push-уведомления доставляются автоматически через Supabase Webhook:
+      // при каждом INSERT в таблицу 'notifications' Supabase вызывает /api/push
+      // с payload record (включая record.user_id и record.id).
+      // Дополнительный fetch здесь НЕ нужен — это и было источником дубликатов!
     } catch (err) {
       console.warn('[dispatchNotification] Supabase error:', err.message);
     }

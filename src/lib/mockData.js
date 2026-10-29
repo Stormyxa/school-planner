@@ -13,7 +13,7 @@ export const SCHOOL_INFO = {
 // Начальный профиль директора школы (для первого входа)
 export const INITIAL_STAFF = [
   {
-    id: 'user-director-1',
+    id: 'bfbebd7a-7252-44f3-af04-8ec2ade217fa',
     name: 'Омарова Гульнара Бауржановна',
     role: 'director',
     roleTitle: 'Директор школы / Мектеп басшысы',

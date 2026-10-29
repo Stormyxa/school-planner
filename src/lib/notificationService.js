@@ -65,15 +65,16 @@ export const NotificationService = {
    * Регистрация браузера/смартфона в W3C PushManager (FCM / APNs)
    * Позволяет доставлять системные уведомления при выключенном экране и закрытом приложении
    */
-  async subscribePush(userOrId, optionalLogin = null) {
+  async subscribePush(userOrId) {
     if (!this.isPushSupported()) {
-      console.warn('[Push] ServiceWorker или PushManager не поддерживаются в этом браузере.');
       return null;
     }
 
     try {
-      const granted = await this.requestPermission();
-      if (!granted) return null;
+      if (Notification.permission !== 'granted') {
+        const granted = await this.requestPermission();
+        if (!granted) return null;
+      }
 
       const registration = await navigator.serviceWorker.ready;
       let subscription = await registration.pushManager.getSubscription();
@@ -85,21 +86,13 @@ export const NotificationService = {
         });
       }
 
-      // Извлекаем userId и userLogin из объекта или аргументов
-      let userId = null;
-      let userLogin = optionalLogin;
-
-      if (typeof userOrId === 'object' && userOrId !== null) {
-        userId = userOrId.id || userOrId.login;
-        userLogin = userOrId.login || optionalLogin;
-      } else {
-        userId = userOrId;
+      let userUuid = typeof userOrId === 'object' && userOrId !== null ? userOrId.id : userOrId;
+      if (userUuid === 'user-director-1') {
+        userUuid = 'bfbebd7a-7252-44f3-af04-8ec2ade217fa';
       }
 
-      if (subscription && userId) {
+      if (subscription && userUuid) {
         const subJson = subscription.toJSON();
-        const idValue = String(userId);
-        const loginValue = userLogin ? String(userLogin).toLowerCase() : null;
 
         // 1. Сохраняем подписку через Vercel Serverless Function /api/push
         try {
@@ -108,8 +101,7 @@ export const NotificationService = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               action: 'subscribe',
-              userId: idValue,
-              userLogin: loginValue,
+              userId: userUuid,
               subscription: subJson
             })
           });
@@ -121,7 +113,7 @@ export const NotificationService = {
         if (isSupabaseConfigured() && supabase) {
           try {
             await supabase.from('push_subscriptions').upsert([{
-              user_id: idValue,
+              user_id: userUuid,
               endpoint: subscription.endpoint,
               subscription: subJson,
               user_agent: navigator.userAgent,
@@ -145,9 +137,12 @@ export const NotificationService = {
    * Позволяет проверить приход уведомления при выключенном экране телефона
    */
   async sendTestWebPush(currentUser, delaySeconds = 0) {
-    if (!currentUser) return { success: false, error: 'Пользователь не авторизован' };
+    if (!currentUser?.id) return { success: false, error: 'Пользователь не авторизован' };
 
-    const targetUserId = currentUser.id || currentUser.login;
+    let targetUserId = currentUser.id;
+    if (targetUserId === 'user-director-1') {
+      targetUserId = 'bfbebd7a-7252-44f3-af04-8ec2ade217fa';
+    }
 
     if (delaySeconds > 0) {
       // Задержка: даем пользователю время заблокировать экран телефона
