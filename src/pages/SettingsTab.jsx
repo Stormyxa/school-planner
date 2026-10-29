@@ -61,14 +61,19 @@ export default function SettingsTab() {
   const handleTestWebPushWithLock = async () => {
     setTestingPush(true);
     setPushTestResult(null);
-    showToast?.('Тест Web Push', 'Через 3 секунды придет пуш. Заблокируйте экран телефона прямо сейчас!', 'task');
+    showToast?.('Тест Web Push', 'Через 3 секунды придет пуш. Заблокируйте экран прямо сейчас!', 'task');
+
+    // 1. Сначала гарантируем регистрацию устройства текущего пользователя
+    if (currentUser) {
+      await NotificationService.subscribePush(currentUser);
+    }
 
     try {
       const res = await NotificationService.sendTestWebPush(currentUser, 3);
-      if (res.success) {
-        setPushTestResult({ success: true, message: `Web Push успешно отправлен на сервер FCM/APNs (доставлено: ${res.sent || 1})!` });
+      if (res && res.sent > 0) {
+        setPushTestResult({ success: true, message: `Web Push успешно отправлен на сервер FCM/APNs (доставлено устройств: ${res.sent})!` });
       } else {
-        setPushTestResult({ success: false, message: `Ошибка отправки: ${res.error || res.reason || 'Неизвестная ошибка'}` });
+        setPushTestResult({ success: false, message: `Пуш не отправлен: ${res?.reason || res?.error || 'Устройство не зарегистрировано'}` });
       }
     } catch (e) {
       setPushTestResult({ success: false, message: e.message });

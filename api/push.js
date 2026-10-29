@@ -37,23 +37,40 @@ function isDuplicate(key) {
   return false;
 }
 
-// Поиск UUID пользователя (поддерживает и чистый UUID, и логин вроде 'director43')
-async function resolveUserUuid(supabase, idOrLogin) {
-  if (!idOrLogin) return null;
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(idOrLogin));
-  if (isUuid) return String(idOrLogin);
+// Поиск UUID пользователя (поддерживает чистый UUID, логины и legacy ID вроде user-director-1)
+async function resolveUserUuid(supabase, idOrLogin, optionalLogin) {
+  if (!idOrLogin && !optionalLogin) return null;
+  const isUuid = (val) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(val || ''));
 
-  try {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id')
-      .or(`login.ilike.${idOrLogin},email.ilike.${idOrLogin}`)
-      .maybeSingle();
-    if (profile?.id) return profile.id;
-  } catch (err) {
-    console.warn('[push] Profile lookup warning:', err.message);
+  if (isUuid(idOrLogin)) return String(idOrLogin);
+  if (isUuid(optionalLogin)) return String(optionalLogin);
+
+  const candidates = [idOrLogin, optionalLogin].filter(Boolean);
+  for (const cand of candidates) {
+    try {
+      const clean = String(cand).toLowerCase().trim();
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .or(`login.ilike.${clean},email.ilike.${clean}`)
+        .maybeSingle();
+      if (profile?.id) return profile.id;
+    } catch {}
   }
-  return String(idOrLogin);
+
+  // Если передан mock-ID директора вроде 'user-director-1' — ищем профиль директора
+  if (candidates.some(c => String(c).includes('director'))) {
+    try {
+      const { data: director } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('role', 'director')
+        .maybeSingle();
+      if (director?.id) return director.id;
+    } catch {}
+  }
+
+  return String(idOrLogin || optionalLogin);
 }
 
 export default async function handler(req, res) {
@@ -61,6 +78,8 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
   const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
@@ -95,7 +114,7 @@ export default async function handler(req, res) {
     }
     if (supabase) {
       try {
-        const userUuid = await resolveUserUuid(supabase, userId || userLogin);
+        const userUuid = await resolveUserUuid(supabase, userId, userLogin);
 
         const subData = {
           user_id:      userUuid || 'guest',

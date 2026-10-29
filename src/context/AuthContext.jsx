@@ -315,8 +315,9 @@ export function AuthProvider({ children }) {
         const current = currentUserRef.current;
         if (current) {
           const fresh = mappedStaff.find(s => s.id === current.id || (s.login && s.login.toLowerCase() === current.login?.toLowerCase()));
-          if (fresh && (fresh.name !== current.name || fresh.role !== current.role || fresh.roleTitle !== current.roleTitle)) {
+          if (fresh && (fresh.id !== current.id || fresh.name !== current.name || fresh.role !== current.role || fresh.roleTitle !== current.roleTitle)) {
             setCurrentUser(fresh);
+            localStorage.setItem('sp_current_user_kz43', JSON.stringify(fresh));
           }
         }
       }
