@@ -36,7 +36,7 @@ export function AuthProvider({ children }) {
     return saved ? JSON.parse(saved) : INITIAL_STAFF;
   });
 
-  // 2. Текущий авторизованный пользователь
+  // 2. Текущий авторизованный пользователь (по умолчанию null — показ формы входа)
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('sp_current_user_kz43');
     if (saved) {
@@ -46,7 +46,7 @@ export function AuthProvider({ children }) {
         // fallback
       }
     }
-    return INITIAL_STAFF[0]; // По умолчанию Директор Омарова Г.Б.
+    return null; // Вход только по логину и паролю
   });
 
   // 3. Задачи и поручения
@@ -74,7 +74,7 @@ export function AuthProvider({ children }) {
 
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
 
-  // Кэширование в LocalStorage
+  // Кэширование
   useEffect(() => {
     localStorage.setItem('sp_staff_kz43', JSON.stringify(staff));
   }, [staff]);
@@ -131,7 +131,6 @@ export function AuthProvider({ children }) {
           }));
           setStaff(mappedStaff);
 
-          // Обновление текущего пользователя из базы
           if (currentUser) {
             const fresh = mappedStaff.find(s => s.id === currentUser.id || s.login === currentUser.login);
             if (fresh) setCurrentUser(fresh);
@@ -140,7 +139,7 @@ export function AuthProvider({ children }) {
 
         // 2. Задачи
         const { data: supaTasks, error: taskErr } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
-        if (!taskErr && supaTasks && supaTasks.length > 0 && isMounted) {
+        if (!taskErr && supaTasks && isMounted) {
           const mappedTasks = supaTasks.map(t => ({
             id: t.id,
             title: t.title,
@@ -164,7 +163,7 @@ export function AuthProvider({ children }) {
 
         // 3. Планёрки
         const { data: supaMeetings, error: meetErr } = await supabase.from('meetings').select('*').order('meeting_date', { ascending: true });
-        if (!meetErr && supaMeetings && supaMeetings.length > 0 && isMounted) {
+        if (!meetErr && supaMeetings && isMounted) {
           const mappedM = supaMeetings.map(m => ({
             id: m.id,
             title: m.title,
@@ -188,7 +187,6 @@ export function AuthProvider({ children }) {
 
     loadFromSupabase();
 
-    // Слушатель Realtime изменений
     const channel = supabase
       .channel('school_planner_realtime_kz')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
@@ -226,12 +224,12 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Вход по логину и паролю
+  // Авторизация
   const loginWithCredentials = async (login, password) => {
     const cleanLogin = login.trim().toLowerCase();
     const cleanPass = password.trim();
 
-    // 1. Попытка входа через Supabase
+    // 1. Проверка через Supabase
     if (isSupabaseConfigured() && supabase) {
       try {
         const { data, error } = await supabase
@@ -287,8 +285,8 @@ export function AuthProvider({ children }) {
   const addTask = async (taskData) => {
     const newTask = {
       id: `task-${Date.now()}`,
-      createdById: currentUser.id,
-      createdByName: `${currentUser.name} (${currentUser.roleTitle})`,
+      createdById: currentUser?.id,
+      createdByName: `${currentUser?.name} (${currentUser?.roleTitle})`,
       status: 'todo',
       submittedFile: null,
       ...taskData
@@ -318,7 +316,7 @@ export function AuthProvider({ children }) {
     const newNotif = {
       id: `notif-${Date.now()}`,
       title: 'Жаңа тапсырма / Новое поручение',
-      message: `${currentUser.name}: «${newTask.title}»`,
+      message: `${currentUser?.name}: «${newTask.title}»`,
       time: 'Только что',
       read: false,
       type: 'task'
@@ -332,27 +330,24 @@ export function AuthProvider({ children }) {
     return newTask;
   };
 
-  // ОТМЕНА ПОРУЧЕНИЯ ПОСТАНОВЩИКОМ (ДИРЕКТОРОМ / ЗАВУЧЕМ)
+  // Отмена поручения постановщиком
   const cancelTask = async (taskId, reason) => {
     let cancelledTaskTitle = '';
-    let assignedUserId = '';
 
     setTasks(prev => prev.map(t => {
       if (t.id === taskId) {
         cancelledTaskTitle = t.title;
-        assignedUserId = t.assignedToId;
         return {
           ...t,
           status: 'cancelled',
           cancelReason: reason,
           cancelledAt: new Date().toISOString(),
-          cancelledByName: currentUser.name
+          cancelledByName: currentUser?.name
         };
       }
       return t;
     }));
 
-    // Запись в Supabase
     if (isSupabaseConfigured() && supabase) {
       try {
         await supabase.from('tasks').update({
@@ -364,7 +359,6 @@ export function AuthProvider({ children }) {
       }
     }
 
-    // Уведомление исполнителю
     const cancelNotif = {
       id: `notif-${Date.now()}`,
       title: 'Тапсырманың күші жойылды / Поручение отменено',
@@ -376,7 +370,7 @@ export function AuthProvider({ children }) {
     setNotifications(prev => [cancelNotif, ...prev]);
 
     NotificationService.send('Поручение отменено', {
-      body: `«${cancelledTaskTitle}» отменено дирекцией: ${reason}`
+      body: `«${cancelledTaskTitle}» отменено: ${reason}`
     });
   };
 
@@ -451,7 +445,7 @@ export function AuthProvider({ children }) {
     const newNotif = {
       id: `notif-${Date.now()}`,
       title: 'Есеп тексеруге жіберілді / Отчет сдан',
-      message: `${currentUser.name} сдал(а) отчет по задаче`,
+      message: `${currentUser?.name} сдал(а) отчет по задаче`,
       time: 'Только что',
       read: false,
       type: 'file'
@@ -459,15 +453,15 @@ export function AuthProvider({ children }) {
     setNotifications(prev => [newNotif, ...prev]);
 
     NotificationService.send('Отчет сдан', {
-      body: `${currentUser.name} прикрепил(а) документ на проверку.`
+      body: `${currentUser?.name} прикрепил(а) документ на проверку.`
     });
   };
 
-  // Создание планёрки
+  // Добавление планёрки
   const addMeeting = async (meetingData) => {
     const newMeeting = {
       id: `meet-${Date.now()}`,
-      leader: `${currentUser.name} (${currentUser.roleTitle})`,
+      leader: `${currentUser?.name} (${currentUser?.roleTitle})`,
       status: 'scheduled',
       ...meetingData
     };
@@ -504,7 +498,7 @@ export function AuthProvider({ children }) {
     return newMeeting;
   };
 
-  // Добавление сотрудника директором (с сохранением в Supabase)
+  // Добавление сотрудника директором
   const addStaffMember = async (memberData) => {
     const newMember = {
       id: `user-${Date.now()}`,

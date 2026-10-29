@@ -5,8 +5,8 @@ import { School, Lock, User, AlertCircle, Eye, EyeOff, Globe } from 'lucide-reac
 export default function LoginScreen() {
   const { loginWithCredentials, schoolInfo, lang, toggleLanguage, t } = useAuth();
 
-  const [login, setLogin] = useState('director43');
-  const [password, setPassword] = useState('school43kz');
+  const [login, setLogin] = useState('');
+  const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -36,13 +36,13 @@ export default function LoginScreen() {
       padding: '1.25rem',
       position: 'relative'
     }}>
-      {/* Кнопка смены языка в углу */}
+      {/* Кнопка смены языка в правом верхнем углу */}
       <div style={{ position: 'absolute', top: '1.25rem', right: '1.5rem' }}>
         <button
           onClick={toggleLanguage}
           className="btn-secondary btn-sm"
           style={{ gap: '0.4rem', borderRadius: 'var(--radius-full)' }}
-          title="Сменить язык (Қазақша / Русский)"
+          title="Тілді өзгерту / Сменить язык"
         >
           <Globe size={14} color="var(--color-primary)" />
           <strong>{lang === 'ru' ? '🇰🇿 Қазақша' : '🇷🇺 Русский'}</strong>
@@ -50,9 +50,9 @@ export default function LoginScreen() {
       </div>
 
       <div className="card" style={{
-        maxWidth: '440px',
+        maxWidth: '420px',
         width: '100%',
-        padding: '2rem 1.75rem',
+        padding: '2.25rem 2rem',
         boxShadow: 'var(--shadow-xl)',
         borderRadius: 'var(--radius-lg)'
       }}>
@@ -106,7 +106,7 @@ export default function LoginScreen() {
               <input
                 type="text"
                 required
-                placeholder="director43"
+                placeholder="Логин"
                 value={login}
                 onChange={e => setLogin(e.target.value)}
                 style={{ paddingLeft: '2.4rem' }}
@@ -150,30 +150,12 @@ export default function LoginScreen() {
           <button
             type="submit"
             className="btn-primary"
-            style={{ width: '100%', marginTop: '0.5rem', padding: '0.75rem' }}
+            style={{ width: '100%', marginTop: '0.75rem', padding: '0.75rem' }}
             disabled={loading}
           >
             {loading ? 'Вход в систему...' : t('loginButton')}
           </button>
         </form>
-
-        {/* Памятка для директора */}
-        <div style={{
-          marginTop: '1.5rem',
-          padding: '0.85rem',
-          backgroundColor: 'var(--bg-surface-subtle)',
-          borderRadius: 'var(--radius-sm)',
-          fontSize: '0.75rem',
-          color: 'var(--text-secondary)',
-          lineHeight: 1.4,
-          border: '1px solid var(--border-subtle)'
-        }}>
-          <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.2rem' }}>
-            {t('quickDemoHint')}
-          </div>
-          <div>Логин: <code>director43</code></div>
-          <div>Пароль: <code>school43kz</code></div>
-        </div>
       </div>
     </div>
   );

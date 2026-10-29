@@ -8,15 +8,12 @@ import {
   Bell, 
   Smartphone, 
   Download, 
-  RotateCcw, 
   CheckCircle2, 
   AlertCircle,
-  Copy,
-  ExternalLink,
   RefreshCw,
-  Loader2
+  Loader2,
+  Trash2
 } from 'lucide-react';
-import { INITIAL_STAFF, INITIAL_TASKS, INITIAL_MEETINGS, INITIAL_NOTIFICATIONS } from '../lib/mockData';
 
 const GithubIcon = ({ size = 18, color = 'currentColor' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -26,7 +23,7 @@ const GithubIcon = ({ size = 18, color = 'currentColor' }) => (
 );
 
 export default function SettingsTab() {
-  const { schoolInfo, staff, tasks, meetings, setStaff, setTasks, setMeetings } = useAuth();
+  const { schoolInfo, staff, tasks, meetings, logout } = useAuth();
   const [pushStatus, setPushStatus] = useState(NotificationService.getPermissionStatus());
   
   // Тестирование Supabase
@@ -50,7 +47,7 @@ export default function SettingsTab() {
     const granted = await NotificationService.requestPermission();
     setPushStatus(NotificationService.getPermissionStatus());
     if (granted) {
-      NotificationService.send('КГУ «СШ № 43»', {
+      NotificationService.send(schoolInfo.shortName, {
         body: 'Школьная Планёрка: уведомления успешно подключены!'
       });
     }
@@ -68,17 +65,15 @@ export default function SettingsTab() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `kgu_sch43_backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `kgu_sch43_archive_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const handleResetDemoData = () => {
-    if (window.confirm('Сбросить все задачи, планёрки и учителей к эталонным данным КГУ «СШ № 43»?')) {
-      setStaff(INITIAL_STAFF);
-      setTasks(INITIAL_TASKS);
-      setMeetings(INITIAL_MEETINGS);
+  const handleClearLocalCache = () => {
+    if (window.confirm('Очистить локальный кэш браузера и перезагрузить сессию?')) {
       localStorage.clear();
+      logout();
       window.location.reload();
     }
   };
@@ -118,16 +113,16 @@ export default function SettingsTab() {
               <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: 0 }}>База данных Supabase</h3>
             </div>
             {isSupaActive ? (
-              <span className="badge badge-success"><CheckCircle2 size={12} /> Ключи заданы</span>
+              <span className="badge badge-success"><CheckCircle2 size={12} /> Активно</span>
             ) : (
-              <span className="badge badge-warning"><AlertCircle size={12} /> Автономный режим</span>
+              <span className="badge badge-warning"><AlertCircle size={12} /> Локальное хранилище</span>
             )}
           </div>
 
           <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
             {isSupaActive 
-              ? 'Ключи Supabase подключены. Все действия директора и учителей синхронизируются в реальном времени.'
-              : 'Приложение работает через быстрое локальное хранилище браузера (LocalStorage). Для синхронизации между разными устройствами добавьте переменные в файл .env или на Vercel:'}
+              ? 'Ключи Supabase подключены. Все действия директора и учителей синхронизируются в реальном времени в облаке.'
+              : 'Для постоянной синхронизации между устройствами укажите ключи в .env или на Vercel:'}
           </p>
 
           <div style={{
@@ -236,15 +231,15 @@ export default function SettingsTab() {
           </div>
         </div>
 
-        {/* Блок 4: Резервное копирование и сброс */}
+        {/* Блок 4: Резервное копирование и кэш */}
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
             <Download size={20} color="var(--color-primary)" />
-            <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: 0 }}>Архив и Бэкап КГУ «СШ № 43»</h3>
+            <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: 0 }}>Резервная копия школы</h3>
           </div>
 
           <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-            Выгрузка полного архива поручений, протоколов планёрок и карточек педагогов в формате JSON.
+            Выгрузка полного архива поручений, протоколов планёрок и карточек педагогов в формате JSON на компьютер директора.
           </p>
 
           <div style={{ display: 'flex', gap: '0.6rem', marginTop: '1rem', flexWrap: 'wrap' }}>
@@ -252,9 +247,9 @@ export default function SettingsTab() {
               <Download size={14} />
               Скачать копию (JSON)
             </button>
-            <button className="btn-ghost btn-sm" style={{ color: 'var(--color-danger)' }} onClick={handleResetDemoData}>
-              <RotateCcw size={14} />
-              Сброс к эталону СШ № 43
+            <button className="btn-ghost btn-sm" style={{ color: 'var(--color-danger)' }} onClick={handleClearLocalCache}>
+              <Trash2 size={14} />
+              Очистить локальный кэш
             </button>
           </div>
         </div>

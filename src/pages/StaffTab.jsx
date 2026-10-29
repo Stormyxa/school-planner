@@ -10,7 +10,10 @@ import {
   Search, 
   Mail, 
   GraduationCap,
-  ShieldCheck
+  ShieldCheck,
+  Send,
+  X,
+  CreditCard
 } from 'lucide-react';
 
 export default function StaffTab() {
@@ -19,7 +22,9 @@ export default function StaffTab() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showCardsModal, setShowCardsModal] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
+  const [copiedAll, setCopiedAll] = useState(false);
 
   // Форма добавления сотрудника
   const [name, setName] = useState('');
@@ -48,7 +53,19 @@ export default function StaffTab() {
     setTimeout(() => setCopiedId(null), 2500);
   };
 
-  const handlePrintStaff = () => {
+  // Копирование всего списка для цифровой рассылки в WhatsApp / Telegram
+  const handleCopyAllForMessengers = () => {
+    const header = `🏫 *${schoolInfo.shortName}* — Доступы к Школьной Планёрке:\n`;
+    const list = staff.map((m, idx) => 
+      `${idx + 1}. *${m.name}* (${m.roleTitle})\n   👤 Логин: \`${m.login}\`\n   🔑 Пароль: \`${m.passHint}\``
+    ).join('\n\n');
+
+    navigator.clipboard.writeText(header + '\n' + list);
+    setCopiedAll(true);
+    setTimeout(() => setCopiedAll(false), 2500);
+  };
+
+  const handlePrintCards = () => {
     window.print();
   };
 
@@ -79,7 +96,7 @@ export default function StaffTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       {/* Шапка */}
-      <div className="card" style={{
+      <div className="card no-print" style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -110,11 +127,28 @@ export default function StaffTab() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.6rem' }}>
-          <button className="btn-secondary btn-sm hide-on-mobile" onClick={handlePrintStaff}>
-            <Printer size={15} />
-            {t('btnPrintPasswords')}
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+          {/* Кнопка копирования для WhatsApp/Telegram */}
+          <button 
+            className="btn-secondary btn-sm" 
+            onClick={handleCopyAllForMessengers}
+            title="Скопировать все логины и пароли для отправки в WhatsApp / Telegram"
+            style={{ gap: '0.4rem', color: '#059669', borderColor: '#a7f3d0' }}
+          >
+            {copiedAll ? <Check size={15} color="var(--color-success)" /> : <Send size={15} />}
+            {copiedAll ? 'Список скопирован!' : 'Список для WhatsApp / Telegram'}
           </button>
+
+          {/* Карточки для печати */}
+          <button 
+            className="btn-secondary btn-sm" 
+            onClick={() => setShowCardsModal(true)}
+            style={{ gap: '0.4rem' }}
+          >
+            <CreditCard size={15} />
+            Карточки паролей
+          </button>
+
           {isDirector && (
             <button className="btn-primary btn-sm" onClick={() => setShowAddModal(true)}>
               <UserPlus size={16} />
@@ -125,7 +159,7 @@ export default function StaffTab() {
       </div>
 
       {/* Панель фильтров */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+      <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div style={{ display: 'flex', gap: '0.4rem' }}>
           <button 
             onClick={() => setRoleFilter('all')} 
@@ -160,7 +194,7 @@ export default function StaffTab() {
       </div>
 
       {/* Сетка карточек сотрудников */}
-      <div className="grid-cols-auto">
+      <div className="grid-cols-auto no-print">
         {filteredStaff.map(member => (
           <div key={member.id} className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
             <div>
@@ -243,6 +277,90 @@ export default function StaffTab() {
           </div>
         ))}
       </div>
+
+      {/* МОДАЛЬНОЕ ОКНО ПЕЧАТИ ТАЛОНОВ / КАРТОЧЕК ДОСТУПА */}
+      {showCardsModal && (
+        <div className="modal-backdrop" onClick={() => setShowCardsModal(false)}>
+          <div className="modal-content" style={{ maxWidth: '820px' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header no-print">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <CreditCard size={20} color="var(--color-primary)" />
+                <h2 className="modal-title">Талоны доступа для педагогов (для разрезания)</h2>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <button className="btn-primary btn-sm" onClick={handlePrintCards}>
+                  <Printer size={15} />
+                  Печать на принтер (A4)
+                </button>
+                <button className="btn-ghost btn-icon" onClick={() => setShowCardsModal(false)}>
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+                gap: '12px'
+              }}>
+                {staff.map(member => (
+                  <div
+                    key={member.id}
+                    style={{
+                      border: '2px dashed #94a3b8',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      backgroundColor: '#ffffff',
+                      color: '#0f172a',
+                      fontSize: '12px',
+                      pageBreakInside: 'avoid',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between'
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px', marginBottom: '6px' }}>
+                        <span style={{ fontWeight: 700, fontSize: '11px', color: '#0284c7' }}>
+                          {schoolInfo.shortName}
+                        </span>
+                        <span style={{ fontSize: '10px', color: '#64748b' }}>ТАЛОН</span>
+                      </div>
+
+                      <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '2px', color: '#0f172a' }}>
+                        {member.name}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#475569', marginBottom: '8px' }}>
+                        {member.roleTitle}
+                      </div>
+
+                      <div style={{ backgroundColor: '#f8fafc', padding: '6px 8px', borderRadius: '4px', border: '1px solid #e2e8f0', fontFamily: 'monospace', fontSize: '12px' }}>
+                        <div>Логин: <strong>{member.login}</strong></div>
+                        <div>Пароль: <strong>{member.passHint}</strong></div>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '9px', color: '#94a3b8', marginTop: '8px', textAlign: 'center' }}>
+                      ✂️ Линия отреза • Вход в Школьную Планёрку
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="modal-footer no-print">
+              <button className="btn-secondary" onClick={() => setShowCardsModal(false)}>
+                {t('btnClose')}
+              </button>
+              <button className="btn-primary" onClick={handlePrintCards}>
+                <Printer size={15} />
+                Печать карточек
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Модалка добавления сотрудника */}
       {showAddModal && (

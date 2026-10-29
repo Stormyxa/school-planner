@@ -17,7 +17,6 @@ export const translations = {
     passwordLabel: 'Пароль',
     loginButton: 'Войти в кабинет',
     loginError: 'Неверный логин или пароль. Обратитесь к директору.',
-    quickDemoHint: 'Для первого входа используйте логин директора:',
     kundelikLink: 'Kundelik.kz',
 
     // Навигация
@@ -124,7 +123,6 @@ export const translations = {
     passwordLabel: 'Құпия сөз',
     loginButton: 'Кабинетке кіру',
     loginError: 'Қате логин немесе құпия сөз. Мектеп басшысына хабарласыңыз.',
-    quickDemoHint: 'Алғашқы кіру үшін директор логинін қолданыңыз:',
     kundelikLink: 'Kundelik.kz',
 
     // Навигация
