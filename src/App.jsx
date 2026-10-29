@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
@@ -16,7 +16,15 @@ import TaskDetailModal from './components/TaskDetailModal';
 
 function AppContent() {
   const { currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState('dashboard');
+
+  // Сохраняем и восстанавливаем выбранную вкладку при перезагрузке
+  const [activeTab, setActiveTab] = useState(() => {
+    return localStorage.getItem('sp_active_tab_kz43') || 'dashboard';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('sp_active_tab_kz43', activeTab);
+  }, [activeTab]);
   
   // Состояния модальных окон
   const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
@@ -24,7 +32,7 @@ function AppContent() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [taskToSubmit, setTaskToSubmit] = useState(null);
 
-  // Если пользователь не вошел — показываем экран авторизации
+  // Если не авторизован — показываем экран входа
   if (!currentUser) {
     return <LoginScreen />;
   }
@@ -57,7 +65,7 @@ function AppContent() {
           maxWidth: '1280px',
           margin: '0 auto',
           width: '100%',
-          paddingBottom: '5rem' // Отступ под мобильную навигацию
+          paddingBottom: '5rem'
         }}>
           {activeTab === 'dashboard' && (
             <DashboardTab 

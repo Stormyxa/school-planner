@@ -4,13 +4,21 @@ import {
   CalendarDays, 
   PlusCircle, 
   CheckCircle2,
-  XCircle 
+  XCircle,
+  Trash2 
 } from 'lucide-react';
 
 export default function PlannerTab({ onOpenNewMeeting, onSelectTask }) {
-  const { meetings, tasks, isDirector, isHeadTeacher, t, schoolInfo } = useAuth();
+  const { meetings, tasks, isDirector, isHeadTeacher, currentUser, deleteMeeting, t, schoolInfo } = useAuth();
   
   const [viewMode, setViewMode] = useState('week'); // 'week' | 'month' | 'agenda'
+
+  const handleDeleteMeeting = async (e, meetingId) => {
+    e.stopPropagation();
+    if (window.confirm(t('confirmDeleteMeeting'))) {
+      await deleteMeeting(meetingId);
+    }
+  };
 
   // Дни недели
   const getWeekDates = () => {
@@ -191,31 +199,54 @@ export default function PlannerTab({ onOpenNewMeeting, onSelectTask }) {
                     </div>
                   ) : null}
 
-                  {/* Планёрки */}
-                  {dayMeetings.map(m => (
-                    <div 
-                      key={m.id}
-                      style={{
-                        padding: '0.6rem',
-                        borderRadius: 'var(--radius-xs)',
-                        backgroundColor: 'var(--color-primary-bg)',
-                        borderLeft: '3px solid #0284c7',
-                        fontSize: '0.78rem'
-                      }}
-                    >
-                      <div style={{ fontWeight: 600, color: 'var(--color-primary-dark)' }}>
-                        {m.title}
-                      </div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-                        ⏰ {m.time}
-                      </div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                        📍 {m.location}
-                      </div>
-                    </div>
-                  ))}
+                  {/* Карточки планёрок с возможностью удаления */}
+                  {dayMeetings.map(m => {
+                    const canDelete = isDirector || m.leaderId === currentUser?.id || m.leader?.includes(currentUser?.name);
 
-                  {/* Дедлайны */}
+                    return (
+                      <div 
+                        key={m.id}
+                        style={{
+                          padding: '0.6rem',
+                          borderRadius: 'var(--radius-xs)',
+                          backgroundColor: 'var(--color-primary-bg)',
+                          borderLeft: '3px solid #0284c7',
+                          fontSize: '0.78rem',
+                          position: 'relative'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div style={{ fontWeight: 600, color: 'var(--color-primary-dark)', flex: 1, paddingRight: '4px' }}>
+                            {m.title}
+                          </div>
+                          {canDelete && (
+                            <button
+                              onClick={(e) => handleDeleteMeeting(e, m.id)}
+                              style={{
+                                padding: '2px',
+                                color: 'var(--color-danger)',
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                opacity: 0.7
+                              }}
+                              title={t('btnDeleteMeeting')}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                          ⏰ {m.time}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                          📍 {m.location}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Дедлайны задач */}
                   {dayDeadlines.map(t => (
                     <div
                       key={t.id}
@@ -261,31 +292,53 @@ export default function PlannerTab({ onOpenNewMeeting, onSelectTask }) {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-            {meetings.map(meet => (
-              <div key={meet.id} style={{
-                padding: '1rem',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid var(--border-subtle)',
-                backgroundColor: 'var(--bg-surface-subtle)'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                  <span className="badge badge-primary">{meet.typeLabel}</span>
-                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-primary)' }}>
-                    {new Date(meet.date).toLocaleDateString('ru-RU')}
-                  </span>
+            {meetings.map(meet => {
+              const canDelete = isDirector || meet.leaderId === currentUser?.id || meet.leader?.includes(currentUser?.name);
+
+              return (
+                <div key={meet.id} style={{
+                  padding: '1rem',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-subtle)',
+                  backgroundColor: 'var(--bg-surface-subtle)',
+                  position: 'relative'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem', alignItems: 'center' }}>
+                    <span className="badge badge-primary">{meet.typeLabel}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-primary)' }}>
+                        {new Date(meet.date).toLocaleDateString('ru-RU')}
+                      </span>
+                      {canDelete && (
+                        <button
+                          onClick={(e) => handleDeleteMeeting(e, meet.id)}
+                          style={{
+                            padding: '3px',
+                            color: 'var(--color-danger)',
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer'
+                          }}
+                          title={t('btnDeleteMeeting')}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <h4 style={{ fontSize: '0.95rem', fontWeight: 600, margin: '0.3rem 0' }}>{meet.title}</h4>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                    ⏰ {meet.time} • 📍 {meet.location}
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    <strong>Күн тәртібі:</strong>
+                    <ul style={{ paddingLeft: '1.2rem', marginTop: '0.2rem' }}>
+                      {meet.agenda.map((ag, i) => <li key={i}>{ag}</li>)}
+                    </ul>
+                  </div>
                 </div>
-                <h4 style={{ fontSize: '0.95rem', fontWeight: 600, margin: '0.3rem 0' }}>{meet.title}</h4>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                  ⏰ {meet.time} • 📍 {meet.location}
-                </div>
-                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  <strong>Күн тәртібі:</strong>
-                  <ul style={{ paddingLeft: '1.2rem', marginTop: '0.2rem' }}>
-                    {meet.agenda.map((ag, i) => <li key={i}>{ag}</li>)}
-                  </ul>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -293,33 +346,52 @@ export default function PlannerTab({ onOpenNewMeeting, onSelectTask }) {
       {/* РЕЖИМ 3: ВСЕ ВСТРЕЧИ */}
       {viewMode === 'agenda' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-          {meetings.map(m => (
-            <div key={m.id} className="card" style={{ padding: '1.25rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
-                <span className="badge badge-primary">{m.typeLabel}</span>
-                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                  Күні: {new Date(m.date).toLocaleDateString('ru-RU')} • Уақыты: {m.time}
-                </span>
-              </div>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0 }}>
-                {m.title}
-              </h3>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.3rem' }}>
-                Өтетін орны: {m.location} • Төрағасы: {m.leader}
-              </div>
+          {meetings.map(m => {
+            const canDelete = isDirector || m.leaderId === currentUser?.id || m.leader?.includes(currentUser?.name);
 
-              <div style={{ marginTop: '1rem', paddingTop: '0.85rem', borderTop: '1px solid var(--border-subtle)' }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.4rem' }}>
-                  Күн тәртібі / Повестка дня:
+            return (
+              <div key={m.id} className="card" style={{ padding: '1.25rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
+                      <span className="badge badge-primary">{m.typeLabel}</span>
+                      <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                        Күні: {new Date(m.date).toLocaleDateString('ru-RU')} • Уақыты: {m.time}
+                      </span>
+                    </div>
+                    <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0 }}>
+                      {m.title}
+                    </h3>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.3rem' }}>
+                      Өтетін орны: {m.location} • Төрағасы: {m.leader}
+                    </div>
+                  </div>
+
+                  {canDelete && (
+                    <button
+                      onClick={(e) => handleDeleteMeeting(e, m.id)}
+                      className="btn-ghost btn-sm"
+                      style={{ color: 'var(--color-danger)', gap: '0.3rem' }}
+                    >
+                      <Trash2 size={15} />
+                      {t('btnDeleteMeeting')}
+                    </button>
+                  )}
                 </div>
-                <ol style={{ paddingLeft: '1.2rem', fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                  {m.agenda.map((item, idx) => (
-                    <li key={idx}>{item}</li>
-                  ))}
-                </ol>
+
+                <div style={{ marginTop: '1rem', paddingTop: '0.85rem', borderTop: '1px solid var(--border-subtle)' }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.4rem' }}>
+                    Күн тәртібі / Повестка дня:
+                  </div>
+                  <ol style={{ paddingLeft: '1.2rem', fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    {m.agenda.map((item, idx) => (
+                      <li key={idx}>{item}</li>
+                    ))}
+                  </ol>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

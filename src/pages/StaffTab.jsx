@@ -280,8 +280,13 @@ export default function StaffTab() {
 
       {/* МОДАЛЬНОЕ ОКНО ПЕЧАТИ ТАЛОНОВ / КАРТОЧЕК ДОСТУПА */}
       {showCardsModal && (
-        <div className="modal-backdrop" onClick={() => setShowCardsModal(false)}>
-          <div className="modal-content" style={{ maxWidth: '820px' }} onClick={e => e.stopPropagation()}>
+        <div 
+          className="modal-backdrop" 
+          onMouseUp={(e) => {
+            if (e.target === e.currentTarget) setShowCardsModal(false);
+          }}
+        >
+          <div className="modal-content" style={{ maxWidth: '820px' }} onMouseUp={(e) => e.stopPropagation()}>
             <div className="modal-header no-print">
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                 <CreditCard size={20} color="var(--color-primary)" />
@@ -364,8 +369,13 @@ export default function StaffTab() {
 
       {/* Модалка добавления сотрудника */}
       {showAddModal && (
-        <div className="modal-backdrop" onClick={() => setShowAddModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div 
+          className="modal-backdrop" 
+          onMouseUp={(e) => {
+            if (e.target === e.currentTarget) setShowAddModal(false);
+          }}
+        >
+          <div className="modal-content" onMouseUp={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">Жаңа педагогті қосу / Добавить сотрудника</h2>
               <button className="btn-ghost btn-icon" onClick={() => setShowAddModal(false)}>✕</button>

@@ -30,6 +30,7 @@ export const translations = {
     // Быстрые кнопки
     btnNewTask: 'Дать поручение',
     btnNewMeeting: 'Назначить планёрку',
+    btnDeleteMeeting: 'Удалить встречу',
     btnSubmitReport: 'Сдать отчет',
     btnAcceptReport: 'Принять отчет',
     btnRejectReport: 'На доработку',
@@ -84,6 +85,7 @@ export const translations = {
     cancelReasonPlaceholder: 'Например: Вопрос рассмотрен на совещании / Снято с контроля директором...',
     taskCancelledNotice: 'Данное поручение отменено постановщиком',
     cancellationReason: 'Причина отмены',
+    confirmDeleteMeeting: 'Удалить эту планёрку / совещание?',
 
     // Сбор документов
     docsMatrixTab: '📋 Матрица сдачи по учителям',
@@ -136,6 +138,7 @@ export const translations = {
     // Быстрые кнопки
     btnNewTask: 'Тапсырма беру',
     btnNewMeeting: 'Жиналыс белгілеу',
+    btnDeleteMeeting: 'Жиналысты жою',
     btnSubmitReport: 'Есепті тапсыру',
     btnAcceptReport: 'Есепті қабылдау',
     btnRejectReport: 'Қайта өңдеуге',
@@ -190,6 +193,7 @@ export const translations = {
     cancelReasonPlaceholder: 'Мысалы: Жиналыста қаралды / Директор шешімімен алынды...',
     taskCancelledNotice: 'Бұл тапсырманың күші тапсырма беруші тарапынан жойылған',
     cancellationReason: 'Күшін жою себебі',
+    confirmDeleteMeeting: 'Бұл жиналысты өшіргіңіз келетініне сенімдісіз бе?',
 
     // Сбор документов
     docsMatrixTab: '📋 Мұғалімдер бойынша тапсыру кестесі',

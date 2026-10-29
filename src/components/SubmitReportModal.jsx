@@ -4,7 +4,7 @@ import { uploadSchoolFile } from '../lib/storageService';
 import { X, Upload, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function SubmitReportModal({ isOpen, onClose, task }) {
-  const { currentUser, submitTaskReport } = useAuth();
+  const { currentUser, submitTaskReport, t } = useAuth();
 
   const [file, setFile] = useState(null);
   const [comment, setComment] = useState('');
@@ -36,7 +36,7 @@ export default function SubmitReportModal({ isOpen, onClose, task }) {
         fileInfo = await uploadSchoolFile(file, task.id, currentUser.id);
       }
 
-      submitTaskReport(task.id, fileInfo, comment);
+      await submitTaskReport(task.id, fileInfo, comment);
       setIsUploading(false);
       onClose();
       setFile(null);
@@ -48,12 +48,22 @@ export default function SubmitReportModal({ isOpen, onClose, task }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()}>
+    <div 
+      className="modal-backdrop" 
+      onMouseUp={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div 
+        className="modal-content" 
+        onMouseUp={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
             <Upload size={20} color="var(--color-primary)" />
-            <h2 className="modal-title">Сдача отчета по поручению</h2>
+            <h2 className="modal-title">{t('btnSubmitReport')}</h2>
           </div>
           <button className="btn-ghost btn-icon" onClick={onClose}>
             <X size={18} />
@@ -79,7 +89,7 @@ export default function SubmitReportModal({ isOpen, onClose, task }) {
 
             {/* Зона загрузки файла */}
             <div className="form-group">
-              <label className="form-label">Прикрепить документ отчета *</label>
+              <label className="form-label">Құжат файлын таңдаңыз / Прикрепить документ *</label>
               <div style={{
                 border: '2px dashed var(--border-strong)',
                 borderRadius: 'var(--radius-md)',
@@ -105,7 +115,7 @@ export default function SubmitReportModal({ isOpen, onClose, task }) {
                         {file.name}
                       </div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                        {(file.size / 1024).toFixed(1)} КБ • Нажмите, чтобы заменить
+                        {(file.size / 1024).toFixed(1)} КБ • Ауыстыру үшін басыңыз
                       </div>
                     </div>
                   </div>
@@ -113,10 +123,10 @@ export default function SubmitReportModal({ isOpen, onClose, task }) {
                   <div>
                     <Upload size={32} color="var(--text-muted)" style={{ margin: '0 auto 0.5rem auto' }} />
                     <div style={{ fontWeight: 500, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
-                      Нажмите для выбора файла или перетащите сюда
+                      Файлды таңдау үшін басыңыз
                     </div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
-                      Word (.docx), Excel (.xlsx), PDF, скан-копии (до 50 МБ)
+                      Word (.docx), Excel (.xlsx), PDF, сканерленген құжат
                     </div>
                   </div>
                 )}
@@ -138,10 +148,10 @@ export default function SubmitReportModal({ isOpen, onClose, task }) {
             )}
 
             <div className="form-group">
-              <label className="form-label">Комментарий или пояснения (необязательно)</label>
+              <label className="form-label">Түсініктеме / Комментарий к отчету</label>
               <textarea
                 rows={3}
-                placeholder="Например: Отчет составлен по форме №3. Все показатели сверены с классными журналами."
+                placeholder="Мысалы: 1 тоқсан бойынша СОР/СОЧ кестесі бекітілді..."
                 value={comment}
                 onChange={e => setComment(e.target.value)}
               />
@@ -150,16 +160,16 @@ export default function SubmitReportModal({ isOpen, onClose, task }) {
 
           <div className="modal-footer">
             <button type="button" className="btn-secondary" onClick={onClose} disabled={isUploading}>
-              Отмена
+              {t('btnCancel')}
             </button>
             <button type="submit" className="btn-primary" disabled={isUploading}>
               {isUploading ? (
                 <>
                   <Loader2 size={16} className="pulse" />
-                  Сохранение в архив...
+                  Сақталуда...
                 </>
               ) : (
-                'Отправить отчет на проверку'
+                t('btnSubmitReport')
               )}
             </button>
           </div>

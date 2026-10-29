@@ -34,7 +34,7 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
   const handleAccept = () => {
     updateTaskStatus(task.id, 'completed', {
       reviewedAt: new Date().toISOString(),
-      reviewedByName: currentUser.name
+      reviewedByName: currentUser?.name
     });
     onClose();
   };
@@ -44,7 +44,7 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
     updateTaskStatus(task.id, 'revision', {
       reviewComment: reviewNote.trim(),
       reviewedAt: new Date().toISOString(),
-      reviewedByName: currentUser.name
+      reviewedByName: currentUser?.name
     });
     setShowRejectInput(false);
     onClose();
@@ -75,8 +75,18 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()}>
+    <div 
+      className="modal-backdrop" 
+      onMouseUp={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div 
+        className="modal-content" 
+        onMouseUp={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
             {getStatusBadge(task.status)}
@@ -217,7 +227,7 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
             </div>
           ) : null}
 
-          {/* Замечание директора, если возвращали на доработку */}
+          {/* Замечание директора */}
           {task.reviewComment && (
             <div style={{
               padding: '0.75rem 1rem',
@@ -231,7 +241,7 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
             </div>
           )}
 
-          {/* Форма подтверждения отмены поручения */}
+          {/* Форма отмены поручения */}
           {showCancelPrompt && (
             <div style={{
               marginTop: '1rem',
@@ -263,7 +273,7 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
             </div>
           )}
 
-          {/* Форма отправки на доработку */}
+          {/* Форма доработки */}
           {showRejectInput && (
             <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: 'var(--bg-surface-subtle)', borderRadius: 'var(--radius-sm)' }}>
               <label className="form-label">Укажите, что именно нужно исправить или дополнить:</label>
@@ -288,7 +298,6 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
 
         <div className="modal-footer" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            {/* Кнопка сдачи отчета учителем */}
             {isAssignedToMe && task.status !== 'completed' && task.status !== 'cancelled' && (
               <button 
                 className="btn-primary" 
@@ -302,14 +311,13 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
               </button>
             )}
 
-            {/* КНОПКА ОТМЕНЫ ПОРУЧЕНИЯ ПОСТАНОВЩИКОМ / ДИРЕКТОРОМ */}
             {canCancel && task.status !== 'completed' && task.status !== 'cancelled' && !showCancelPrompt && (
               <button
                 type="button"
                 className="btn-ghost btn-sm"
                 style={{ color: 'var(--color-danger)', border: '1px solid var(--border-subtle)' }}
                 onClick={() => setShowCancelPrompt(true)}
-                title="Отменить задачу (исполнитель получит уведомление об отмене)"
+                title="Отменить задачу"
               >
                 <XCircle size={15} />
                 {t('btnCancelTask')}

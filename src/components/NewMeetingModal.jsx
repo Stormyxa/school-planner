@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { X, CalendarDays, Plus, Trash2 } from 'lucide-react';
 
 export default function NewMeetingModal({ isOpen, onClose }) {
-  const { addMeeting } = useAuth();
+  const { addMeeting, t } = useAuth();
 
   const [title, setTitle] = useState('');
   const [type, setType] = useState('planerka');
@@ -14,8 +14,8 @@ export default function NewMeetingModal({ isOpen, onClose }) {
   const [location, setLocation] = useState('Кабинет директора (№ 201)');
   const [agendaInput, setAgendaInput] = useState('');
   const [agenda, setAgenda] = useState([
-    'Контроль исполнения поручений прошлой недели',
-    'Текущие вопросы учебного процесса'
+    'Мониторинг своевременности ведения Kundelik.kz',
+    'График проведения СОР/СОЧ за 1 четверть'
   ]);
 
   if (!isOpen) return null;
@@ -58,12 +58,22 @@ export default function NewMeetingModal({ isOpen, onClose }) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-content" onClick={e => e.stopPropagation()}>
+    <div 
+      className="modal-backdrop" 
+      onMouseUp={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div 
+        className="modal-content" 
+        onMouseUp={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
             <CalendarDays size={20} color="var(--color-primary)" />
-            <h2 className="modal-title">Назначить планёрку / совещание</h2>
+            <h2 className="modal-title">Жиналыс белгілеу / Назначить планёрку</h2>
           </div>
           <button className="btn-ghost btn-icon" onClick={onClose}>
             <X size={18} />
@@ -73,11 +83,11 @@ export default function NewMeetingModal({ isOpen, onClose }) {
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
             <div className="form-group">
-              <label className="form-label">Тема / Название встречи *</label>
+              <label className="form-label">Кездесу тақырыбы / Тема встречи *</label>
               <input
                 type="text"
                 required
-                placeholder="Например: Планёрка по итогам проверки журналов"
+                placeholder="Мысалы: Аппаратная планёрка: мониторинг Kundelik.kz"
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 autoFocus
@@ -91,12 +101,12 @@ export default function NewMeetingModal({ isOpen, onClose }) {
                   <option value="planerka">Планёрка администрации</option>
                   <option value="pedsovet">Педагогический совет</option>
                   <option value="soveshanie">Совещание при директоре</option>
-                  <option value="shkola">Общешкольное собрание</option>
+                  <option value="shkola">Жалпы мектептік жиналыс</option>
                 </select>
               </div>
 
               <div className="form-group">
-                <label className="form-label">Дата проведения *</label>
+                <label className="form-label">Күні / Дата проведения *</label>
                 <input
                   type="date"
                   required
@@ -108,7 +118,7 @@ export default function NewMeetingModal({ isOpen, onClose }) {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               <div className="form-group">
-                <label className="form-label">Время (начало – конец)</label>
+                <label className="form-label">Уақыты / Время</label>
                 <input
                   type="text"
                   placeholder="08:30 – 09:15"
@@ -118,7 +128,7 @@ export default function NewMeetingModal({ isOpen, onClose }) {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Место проведения</label>
+                <label className="form-label">Өтетін орны / Место</label>
                 <input
                   type="text"
                   placeholder="Кабинет директора (№ 201)"
@@ -129,7 +139,7 @@ export default function NewMeetingModal({ isOpen, onClose }) {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Повестка дня (вопросы к обсуждению)</label>
+              <label className="form-label">Күн тәртібі / Повестка дня</label>
               <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.6rem' }}>
                 <input
                   type="text"
@@ -176,10 +186,10 @@ export default function NewMeetingModal({ isOpen, onClose }) {
 
           <div className="modal-footer">
             <button type="button" className="btn-secondary" onClick={onClose}>
-              Отмена
+              {t('btnCancel')}
             </button>
             <button type="submit" className="btn-primary">
-              Запланировать
+              {t('btnSave')}
             </button>
           </div>
         </form>

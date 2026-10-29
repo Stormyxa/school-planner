@@ -77,9 +77,12 @@ CREATE TABLE IF NOT EXISTS public.meetings (
   meeting_time TEXT NOT NULL,
   location TEXT NOT NULL,
   leader TEXT NOT NULL,
+  leader_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   agenda JSONB DEFAULT '[]'::jsonb,
   status TEXT DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'in_progress', 'completed', 'cancelled'))
 );
+
+ALTER TABLE public.meetings ADD COLUMN IF NOT EXISTS leader_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL;
 
 -- 5. Таблица уведомлений
 CREATE TABLE IF NOT EXISTS public.notifications (
@@ -106,22 +109,23 @@ ALTER TABLE public.task_files ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.meetings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
--- Политики доступа
+-- Политики доступа (полный доступ для школьного интерфейса)
 DROP POLICY IF EXISTS "Разрешить чтение всем сотрудникам" ON public.profiles;
 DROP POLICY IF EXISTS "Разрешить добавление сотрудников" ON public.profiles;
+DROP POLICY IF EXISTS "Разрешить работу с профилями" ON public.profiles;
 DROP POLICY IF EXISTS "Разрешить чтение поручений всем сотрудникам" ON public.tasks;
 DROP POLICY IF EXISTS "Разрешить обновление поручений" ON public.tasks;
+DROP POLICY IF EXISTS "Разрешить работу с задачами" ON public.tasks;
 DROP POLICY IF EXISTS "Разрешить работу с файлами" ON public.task_files;
 DROP POLICY IF EXISTS "Разрешить чтение планёрок" ON public.meetings;
+DROP POLICY IF EXISTS "Разрешить работу с планёрками" ON public.meetings;
 DROP POLICY IF EXISTS "Разрешить работу с уведомлениями" ON public.notifications;
 
-CREATE POLICY "Разрешить чтение всем сотрудникам" ON public.profiles FOR SELECT USING (true);
-CREATE POLICY "Разрешить добавление сотрудников" ON public.profiles FOR ALL USING (true);
-CREATE POLICY "Разрешить чтение поручений всем сотрудникам" ON public.tasks FOR SELECT USING (true);
-CREATE POLICY "Разрешить обновление поручений" ON public.tasks FOR ALL USING (true);
-CREATE POLICY "Разрешить работу с файлами" ON public.task_files FOR ALL USING (true);
-CREATE POLICY "Разрешить чтение планёрок" ON public.meetings FOR ALL USING (true);
-CREATE POLICY "Разрешить работу с уведомлениями" ON public.notifications FOR ALL USING (true);
+CREATE POLICY "Разрешить работу с профилями" ON public.profiles FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Разрешить работу с задачами" ON public.tasks FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Разрешить работу с файлами" ON public.task_files FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Разрешить работу с планёрками" ON public.meetings FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Разрешить работу с уведомлениями" ON public.notifications FOR ALL USING (true) WITH CHECK (true);
 
 -- ==========================================================================
 -- СОЗДАНИЕ ГЛАВНОГО АККАУНТА ДИРЕКТОРА КГУ «СШ № 43»

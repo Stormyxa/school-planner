@@ -13,7 +13,7 @@ const AuthContext = createContext();
 export function AuthProvider({ children }) {
   const [schoolInfo] = useState(SCHOOL_INFO);
 
-  // Язык интерфейса: 'ru' (Русский) или 'kk' (Қазақша)
+  // Язык интерфейса: 'ru' или 'kk'
   const [lang, setLang] = useState(() => {
     return localStorage.getItem('sp_lang_kz43') || 'ru';
   });
@@ -30,13 +30,21 @@ export function AuthProvider({ children }) {
     localStorage.setItem('sp_lang_kz43', lang);
   }, [lang]);
 
-  // 1. Сотрудники КГУ «СШ № 43»
+  // 1. Сотрудники КГУ «СШ № 43» (сохраняются надежно в localStorage и Supabase)
   const [staff, setStaff] = useState(() => {
     const saved = localStorage.getItem('sp_staff_kz43');
-    return saved ? JSON.parse(saved) : INITIAL_STAFF;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {
+        // fallback
+      }
+    }
+    return INITIAL_STAFF;
   });
 
-  // 2. Текущий авторизованный пользователь (по умолчанию null — показ формы входа)
+  // 2. Текущий авторизованный пользователь
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('sp_current_user_kz43');
     if (saved) {
@@ -46,7 +54,7 @@ export function AuthProvider({ children }) {
         // fallback
       }
     }
-    return null; // Вход только по логину и паролю
+    return null; // По умолчанию экран входа
   });
 
   // 3. Задачи и поручения
@@ -104,7 +112,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('sp_theme', theme);
   }, [theme]);
 
-  // Загрузка данных из Supabase и Realtime подписка
+  // Загрузка данных из Supabase со слиянием (merge), чтобы сотрудники не затирались!
   useEffect(() => {
     if (!isSupabaseConfigured() || !supabase) return;
 
@@ -115,7 +123,7 @@ export function AuthProvider({ children }) {
       try {
         // 1. Профили
         const { data: supaProfiles, error: profErr } = await supabase.from('profiles').select('*');
-        if (!profErr && supaProfiles && supaProfiles.length > 0 && isMounted) {
+        if (!profErr && supaProfiles && isMounted) {
           const mappedStaff = supaProfiles.map(p => ({
             id: p.id,
             name: p.full_name,
@@ -129,10 +137,23 @@ export function AuthProvider({ children }) {
             passHint: p.password_hash || 'school43kz',
             avatar: p.avatar || p.full_name.split(' ').map(n => n[0]).slice(0, 2).join('')
           }));
-          setStaff(mappedStaff);
+
+          // Слияние Supabase профилей с локальными, чтобы новые не терялись!
+          setStaff(prev => {
+            const mapByLogin = new Map();
+            mappedStaff.forEach(m => mapByLogin.set(m.login.toLowerCase(), m));
+            prev.forEach(m => {
+              if (!mapByLogin.has(m.login.toLowerCase())) {
+                mapByLogin.set(m.login.toLowerCase(), m);
+              }
+            });
+            const merged = Array.from(mapByLogin.values());
+            localStorage.setItem('sp_staff_kz43', JSON.stringify(merged));
+            return merged;
+          });
 
           if (currentUser) {
-            const fresh = mappedStaff.find(s => s.id === currentUser.id || s.login === currentUser.login);
+            const fresh = mappedStaff.find(s => s.id === currentUser.id || s.login.toLowerCase() === currentUser.login.toLowerCase());
             if (fresh) setCurrentUser(fresh);
           }
         }
@@ -173,6 +194,7 @@ export function AuthProvider({ children }) {
             time: m.meeting_time,
             location: m.location,
             leader: m.leader,
+            leaderId: m.leader_id,
             agenda: Array.isArray(m.agenda) ? m.agenda : [],
             status: m.status
           }));
@@ -229,7 +251,7 @@ export function AuthProvider({ children }) {
     const cleanLogin = login.trim().toLowerCase();
     const cleanPass = password.trim();
 
-    // 1. Проверка через Supabase
+    // 1. Проверка в Supabase
     if (isSupabaseConfigured() && supabase) {
       try {
         const { data, error } = await supabase
@@ -299,7 +321,7 @@ export function AuthProvider({ children }) {
         await supabase.from('tasks').insert([{
           title: newTask.title,
           description: newTask.description,
-          assigned_to_id: newTask.assignedToId.includes('user-') ? null : newTask.assignedToId,
+          assigned_to_id: newTask.assignedToId?.includes('user-') ? null : newTask.assignedToId,
           assigned_to_name: newTask.assignedToName,
           created_by_name: newTask.createdByName,
           priority: newTask.priority,
@@ -322,10 +344,6 @@ export function AuthProvider({ children }) {
       type: 'task'
     };
     setNotifications(prev => [newNotif, ...prev]);
-
-    NotificationService.send(t('schoolShort'), {
-      body: `Жаңа тапсырма: «${newTask.title}»`
-    });
 
     return newTask;
   };
@@ -374,7 +392,7 @@ export function AuthProvider({ children }) {
     });
   };
 
-  // Обновление статуса
+  // Обновление статуса задачи
   const updateTaskStatus = async (taskId, newStatus, extraData = {}) => {
     setTasks(prev => prev.map(t => {
       if (t.id === taskId) {
@@ -462,6 +480,7 @@ export function AuthProvider({ children }) {
     const newMeeting = {
       id: `meet-${Date.now()}`,
       leader: `${currentUser?.name} (${currentUser?.roleTitle})`,
+      leaderId: currentUser?.id,
       status: 'scheduled',
       ...meetingData
     };
@@ -469,7 +488,7 @@ export function AuthProvider({ children }) {
 
     if (isSupabaseConfigured() && supabase) {
       try {
-        await supabase.from('meetings').insert([{
+        const { data, error } = await supabase.from('meetings').insert([{
           title: newMeeting.title,
           type: newMeeting.type,
           type_label: newMeeting.typeLabel,
@@ -477,9 +496,14 @@ export function AuthProvider({ children }) {
           meeting_time: newMeeting.time,
           location: newMeeting.location,
           leader: newMeeting.leader,
+          leader_id: currentUser?.id,
           agenda: newMeeting.agenda,
           status: 'scheduled'
-        }]);
+        }]).select().single();
+
+        if (data) {
+          setMeetings(prev => prev.map(m => m.id === newMeeting.id ? { ...m, id: data.id } : m));
+        }
       } catch {
         // fallback
       }
@@ -498,18 +522,42 @@ export function AuthProvider({ children }) {
     return newMeeting;
   };
 
-  // Добавление сотрудника директором
+  // УДАЛЕНИЕ ПЛАНЁРКИ (СОЗДАТЕЛЕМ ИЛИ ДИРЕКТОРОМ)
+  const deleteMeeting = async (meetingId) => {
+    setMeetings(prev => {
+      const updated = prev.filter(m => m.id !== meetingId);
+      localStorage.setItem('sp_meetings_kz43', JSON.stringify(updated));
+      return updated;
+    });
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from('meetings').delete().eq('id', meetingId);
+      } catch (err) {
+        console.warn('Supabase delete meeting error:', err.message);
+      }
+    }
+  };
+
+  // Добавление сотрудника (с надежным сохранением и в LocalStorage, и в Supabase)
   const addStaffMember = async (memberData) => {
     const newMember = {
       id: `user-${Date.now()}`,
       avatar: memberData.name.split(' ').map(n => n[0]).slice(0, 2).join(''),
       ...memberData
     };
-    setStaff(prev => [...prev, newMember]);
 
+    // 1. Немедленно сохраняем локально, чтобы никогда не терялось при перезагрузке
+    setStaff(prev => {
+      const updated = [...prev, newMember];
+      localStorage.setItem('sp_staff_kz43', JSON.stringify(updated));
+      return updated;
+    });
+
+    // 2. Записываем в Supabase
     if (isSupabaseConfigured() && supabase) {
       try {
-        await supabase.from('profiles').insert([{
+        const { data, error } = await supabase.from('profiles').insert([{
           email: newMember.email || `${newMember.login}@sch43.kz`,
           full_name: newMember.name,
           role: newMember.role,
@@ -520,9 +568,20 @@ export function AuthProvider({ children }) {
           login: newMember.login,
           password_hash: newMember.passHint || 'school43kz',
           avatar: newMember.avatar
-        }]);
+        }]).select().single();
+
+        if (error) {
+          console.error('Ошибка добавления сотрудника в Supabase:', error.message);
+        } else if (data) {
+          // Обновляем реальный UUID из Supabase
+          setStaff(prev => {
+            const updated = prev.map(s => s.id === newMember.id ? { ...s, id: data.id } : s);
+            localStorage.setItem('sp_staff_kz43', JSON.stringify(updated));
+            return updated;
+          });
+        }
       } catch (err) {
-        console.warn('Supabase add staff member notice:', err.message);
+        console.warn('Supabase network notice:', err.message);
       }
     }
 
@@ -561,6 +620,7 @@ export function AuthProvider({ children }) {
       updateTaskStatus,
       submitTaskReport,
       addMeeting,
+      deleteMeeting,
       addStaffMember,
       markAllNotificationsRead
     }}>
