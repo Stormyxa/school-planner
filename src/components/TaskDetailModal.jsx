@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { triggerFileDownload } from '../lib/storageService';
 import { 
   X, 
   Calendar, 
@@ -191,17 +192,14 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
                   </div>
                 </div>
 
-                <a
-                  href={task.submittedFile.url}
-                  download={task.submittedFile.name}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  type="button"
+                  onClick={() => triggerFileDownload(task.submittedFile.url, task.submittedFile.name)}
                   className="btn-primary btn-sm"
-                  style={{ textDecoration: 'none' }}
                 >
                   <Download size={15} />
                   {t('btnDownload')}
-                </a>
+                </button>
               </div>
 
               {task.teacherComment && (

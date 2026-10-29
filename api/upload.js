@@ -33,9 +33,27 @@ export default async function handler(req, res) {
     }
     const buffer = Buffer.concat(chunks);
 
-    // Уникальный путь для файла
+    // Извлекаем имя оригинального файла из query или header
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    const queryFilename = url.searchParams.get('filename');
+    const headerFilename = req.headers['x-filename'];
+    let rawName = 'school_document';
+
+    if (queryFilename) {
+      try { rawName = decodeURIComponent(queryFilename); } catch { rawName = queryFilename; }
+    } else if (headerFilename) {
+      try { rawName = decodeURIComponent(headerFilename); } catch { rawName = headerFilename; }
+    }
+
+    const dotIndex = rawName.lastIndexOf('.');
+    const ext = dotIndex !== -1 ? rawName.substring(dotIndex) : '.bin';
+    const baseName = (dotIndex !== -1 ? rawName.substring(0, dotIndex) : rawName)
+      .replace(/[^a-zA-Z0-9_\u0400-\u04FF-]/g, '_')
+      .slice(0, 50);
+
+    // Уникальный путь для файла с сохранением настоящего расширения (.docx, .xlsx, .pdf и т.д.)
     const timestamp = Date.now();
-    const filePath = `documents/${new Date().getFullYear()}/${timestamp}_school_document.bin`;
+    const filePath = `documents/${new Date().getFullYear()}/${timestamp}_${baseName}${ext}`;
 
     const githubUrl = `https://api.github.com/repos/${githubRepo}/contents/${filePath}`;
 

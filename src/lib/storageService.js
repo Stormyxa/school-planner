@@ -24,14 +24,14 @@ export async function uploadSchoolFile(file, taskId, userId) {
 
   // 1. Попытка загрузить через Vercel Serverless Function (/api/upload -> GitHub Repo)
   try {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('taskId', taskId);
-    formData.append('userId', userId);
-
-    const response = await fetch('/api/upload', {
+    const encodedName = encodeURIComponent(file.name);
+    const response = await fetch(`/api/upload?filename=${encodedName}`, {
       method: 'POST',
-      body: formData
+      headers: {
+        'x-filename': encodedName,
+        'content-type': file.type || 'application/octet-stream'
+      },
+      body: file
     });
 
     if (response.ok) {
@@ -62,4 +62,56 @@ export async function uploadSchoolFile(file, taskId, userId) {
     };
     reader.readAsDataURL(file);
   });
+}
+
+/**
+ * Надежное скачивание файла в браузере с сохранением оригинального имени и расширения (.docx, .xlsx, .pdf)
+ * Предотвращает скачивание в виде .bin для внешних ссылок (GitHub raw content).
+ * @param {string} url - ссылка на файл (GitHub raw или data url)
+ * @param {string} fileName - оригинальное название файла с расширением
+ */
+export async function triggerFileDownload(url, fileName) {
+  if (!url) return;
+  const safeName = fileName || 'document';
+
+  try {
+    // Если это локальный base64 URL
+    if (url.startsWith('data:') || url.startsWith('blob:')) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = safeName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+
+    // Для внешних ссылок (GitHub raw content): запрашиваем Blob
+    // Это гарантирует, что браузер сохранит файл с правильным расширением и именем
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Fetch failed: ' + response.status);
+
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = safeName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    setTimeout(() => {
+      window.URL.revokeObjectURL(blobUrl);
+    }, 2000);
+  } catch {
+    // Резервный вариант, если прямой fetch заблокирован CORS
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noreferrer';
+    a.download = safeName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
 }

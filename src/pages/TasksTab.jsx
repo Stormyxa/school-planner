@@ -13,19 +13,38 @@ import {
 } from 'lucide-react';
 
 export default function TasksTab({ onSelectTask, onOpenNewTask, onOpenSubmitReport }) {
-  const { tasks, currentUser, isDirector, isHeadTeacher, t } = useAuth();
+  const { tasks, staff, currentUser, isDirector, isHeadTeacher, isTeacher, t } = useAuth();
 
-  const [activeFilter, setActiveFilter] = useState('all'); // 'all' | 'my' | 'pending' | 'urgent' | 'completed' | 'cancelled'
+  const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // Фильтрация поручений
-  const filteredTasks = tasks.filter(task => {
+  // 1. Ограничение видимости поручений по ролям:
+  // - Директор видит ВСЕ поручения
+  // - Завуч видит поручения свои (где автор или исполнитель) И поручения учителей
+  // - Учитель видит ТОЛЬКО свои поручения
+  const visibleTasks = tasks.filter(task => {
+    if (isDirector) return true;
+
+    if (isHeadTeacher) {
+      if (task.assignedToId === currentUser?.id || task.createdById === currentUser?.id) return true;
+      const assignedMember = staff.find(s => s.id === task.assignedToId);
+      if (assignedMember && assignedMember.role === 'teacher') return true;
+      return false;
+    }
+
+    // Учитель видит строго свои задачи
+    return task.assignedToId === currentUser?.id || task.createdById === currentUser?.id;
+  });
+
+  // 2. Фильтрация видимых поручений
+  const filteredTasks = visibleTasks.filter(task => {
     // Поиск
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          task.assignedToName.toLowerCase().includes(searchQuery.toLowerCase());
+                          task.assignedToName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (task.description && task.description.toLowerCase().includes(searchQuery.toLowerCase()));
     if (!matchesSearch) return false;
 
     // Категория
@@ -33,10 +52,16 @@ export default function TasksTab({ onSelectTask, onOpenNewTask, onOpenSubmitRepo
 
     // Вкладки
     if (activeFilter === 'my') {
-      return task.assignedToId === currentUser?.id;
+      return task.assignedToId === currentUser?.id || task.createdById === currentUser?.id;
+    }
+    if (activeFilter === 'active') {
+      return (task.status === 'todo' || task.status === 'in_progress') && task.status !== 'cancelled';
     }
     if (activeFilter === 'pending') {
       return task.status === 'submitted';
+    }
+    if (activeFilter === 'revision') {
+      return task.status === 'revision';
     }
     if (activeFilter === 'urgent') {
       return (task.priority === 'urgent' || task.deadline < todayStr) && task.status !== 'completed' && task.status !== 'cancelled';
@@ -79,6 +104,23 @@ export default function TasksTab({ onSelectTask, onOpenNewTask, onOpenSubmitRepo
     }
   };
 
+  // Фильтры: для учителя простой и удобный личный пайплайн задач, для администрации - управленческий контроль
+  const filterTabs = isTeacher ? [
+    { id: 'all', label: `Барлығы / Все (${visibleTasks.length})` },
+    { id: 'active', label: `Орындауда / В работе (${visibleTasks.filter(t => (t.status === 'todo' || t.status === 'in_progress') && t.status !== 'cancelled').length})` },
+    { id: 'pending', label: `Тексеруде / На проверке (${visibleTasks.filter(t => t.status === 'submitted').length})` },
+    { id: 'revision', label: `Қайта өңдеуге (${visibleTasks.filter(t => t.status === 'revision').length})` },
+    { id: 'urgent', label: `Шұғыл (${visibleTasks.filter(t => (t.priority === 'urgent' || t.deadline < todayStr) && t.status !== 'completed' && t.status !== 'cancelled').length})` },
+    { id: 'completed', label: `Орындалды (${visibleTasks.filter(t => t.status === 'completed').length})` }
+  ] : [
+    { id: 'all', label: `${t('filterAll')} (${visibleTasks.length})` },
+    { id: 'my', label: `${t('filterMy')} (${visibleTasks.filter(t => t.assignedToId === currentUser?.id || t.createdById === currentUser?.id).length})` },
+    { id: 'pending', label: `${t('filterPending')} (${visibleTasks.filter(t => t.status === 'submitted').length})` },
+    { id: 'urgent', label: t('filterUrgent') },
+    { id: 'completed', label: t('filterCompleted') },
+    { id: 'cancelled', label: `${t('filterCancelled')} (${visibleTasks.filter(t => t.status === 'cancelled').length})` }
+  ];
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       {/* Шапка раздела */}
@@ -108,7 +150,9 @@ export default function TasksTab({ onSelectTask, onOpenNewTask, onOpenSubmitRepo
               {t('navTasks')} • КГУ «СШ № 43»
             </h2>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Контроль исполнения распоряжений директора и завучей
+              {isTeacher 
+                ? 'Тағайындалған тапсырмалар тізімі және есеп беру' 
+                : 'Контроль исполнения распоряжений директора и завучей'}
             </div>
           </div>
         </div>
@@ -131,14 +175,7 @@ export default function TasksTab({ onSelectTask, onOpenNewTask, onOpenSubmitRepo
       }}>
         {/* Кнопки-фильтры */}
         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-          {[
-            { id: 'all', label: `${t('filterAll')} (${tasks.length})` },
-            { id: 'my', label: `${t('filterMy')} (${tasks.filter(t => t.assignedToId === currentUser?.id).length})` },
-            { id: 'pending', label: `${t('filterPending')} (${tasks.filter(t => t.status === 'submitted').length})` },
-            { id: 'urgent', label: t('filterUrgent') },
-            { id: 'completed', label: t('filterCompleted') },
-            { id: 'cancelled', label: `${t('filterCancelled')} (${tasks.filter(t => t.status === 'cancelled').length})` },
-          ].map(tab => (
+          {filterTabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveFilter(tab.id)}

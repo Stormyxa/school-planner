@@ -13,7 +13,7 @@ export default function NewTaskModal({ isOpen, onClose }) {
     new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString().split('T')[0]
   );
   const [requiresFile, setRequiresFile] = useState(true);
-  const [category, setCategory] = useState('СОР и СОЧ');
+  const [category, setCategory] = useState('');
 
   if (!isOpen) return null;
 
@@ -31,7 +31,7 @@ export default function NewTaskModal({ isOpen, onClose }) {
       priority,
       deadline,
       requiresFile,
-      category
+      category: category.trim() || 'Жалпы'
     });
 
     onClose();
@@ -116,8 +116,9 @@ export default function NewTaskModal({ isOpen, onClose }) {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               <div className="form-group">
-                <label className="form-label">Санаты / Категория</label>
+                <label className="form-label">Санаты / Категория (міндетті емес)</label>
                 <select value={category} onChange={e => setCategory(e.target.value)}>
+                  <option value="">Жалпы / Без категории</option>
                   <option value="СОР и СОЧ">СОР и СОЧ (БЖБ/ТЖБ)</option>
                   <option value="Kundelik.kz">Kundelik.kz (Күнделік)</option>
                   <option value="Біртұтас тәрбие">Біртұтас тәрбие</option>

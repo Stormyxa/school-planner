@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { triggerFileDownload } from '../lib/storageService';
 import { 
   FolderDown, 
   FileText, 
@@ -19,18 +20,36 @@ const GithubIcon = ({ size = 18, color = 'currentColor' }) => (
 );
 
 export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
-  const { staff, tasks, currentUser, isDirector, isHeadTeacher, t, schoolInfo } = useAuth();
+  const { staff, tasks, currentUser, isDirector, isHeadTeacher, isTeacher, t, schoolInfo } = useAuth();
 
   const [activeSubTab, setActiveSubTab] = useState('matrix');
   const [selectedQuarter, setSelectedQuarter] = useState('q1');
   const [searchDoc, setSearchDoc] = useState('');
 
-  // Список активных задач, требующих файл (исключая отмененные)
-  const fileTasks = tasks.filter(t => t.requiresFile && t.status !== 'cancelled');
+  // Задачи, требующие сдачи файла, с учетом роли
+  const fileTasks = tasks.filter(t => {
+    if (t.status === 'cancelled' || !t.requiresFile) return false;
+    if (isTeacher) {
+      return t.assignedToId === currentUser?.id;
+    }
+    return true;
+  });
 
-  // Список загруженных файлов
+  // Список загруженных файлов с учетом прав:
+  // - Директор видит все файлы
+  // - Завуч видит файлы учителей и свои
+  // - Учитель видит только свои загруженные файлы
   const uploadedFiles = tasks
-    .filter(t => t.submittedFile)
+    .filter(t => {
+      if (!t.submittedFile) return false;
+      if (isDirector) return true;
+      if (isHeadTeacher) {
+        if (t.assignedToId === currentUser?.id || t.createdById === currentUser?.id) return true;
+        const teacher = staff.find(s => s.id === t.assignedToId);
+        return teacher && teacher.role === 'teacher';
+      }
+      return t.assignedToId === currentUser?.id;
+    })
     .map(t => ({
       taskId: t.id,
       taskTitle: t.title,
@@ -47,7 +66,10 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
       item.taskTitle.toLowerCase().includes(searchDoc.toLowerCase())
     );
 
-  const teachersOnly = staff.filter(s => s.role === 'teacher');
+  // В ведомости: учитель видит только свою строку, администрация видит учителей
+  const displayedStaff = isTeacher
+    ? staff.filter(s => s.id === currentUser?.id)
+    : staff.filter(s => s.role === 'teacher');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -192,7 +214,7 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
                 </tr>
               </thead>
               <tbody>
-                {teachersOnly.map(teacher => {
+                {displayedStaff.map(teacher => {
                   const teacherTasks = tasks.filter(t => t.assignedToId === teacher.id && t.requiresFile && t.status !== 'cancelled');
                   const hasSubmittedAll = teacherTasks.length > 0 && teacherTasks.every(t => t.submittedFile);
 
@@ -223,19 +245,18 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
                         if (task.submittedFile) {
                           return (
                             <td key={task.id} style={{ padding: '0.85rem 1rem' }}>
-                              <a
-                                href={task.submittedFile.url}
-                                download={task.submittedFile.name}
-                                target="_blank"
-                                rel="noreferrer"
+                              <button
+                                type="button"
+                                onClick={() => triggerFileDownload(task.submittedFile.url, task.submittedFile.name)}
                                 style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
                                   gap: '0.35rem',
                                   color: 'var(--color-success)',
                                   fontWeight: 600,
-                                  textDecoration: 'none',
                                   backgroundColor: 'var(--color-success-bg)',
+                                  border: 'none',
+                                  cursor: 'pointer',
                                   padding: '0.25rem 0.5rem',
                                   borderRadius: 'var(--radius-xs)',
                                   fontSize: '0.75rem'
@@ -244,24 +265,36 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
                               >
                                 <Download size={13} />
                                 {task.submittedFile.name.length > 18 ? task.submittedFile.name.slice(0, 16) + '...' : task.submittedFile.name}
-                              </a>
+                              </button>
                             </td>
                           );
                         }
 
                         return (
                           <td key={task.id} style={{ padding: '0.85rem 1rem' }}>
-                            <span style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.3rem',
-                              color: 'var(--color-danger)',
-                              fontSize: '0.75rem',
-                              fontWeight: 500
-                            }}>
-                              <AlertCircle size={13} />
-                              {t('docsNotSubmitted')}
-                            </span>
+                            {teacher.id === currentUser?.id ? (
+                              <button
+                                type="button"
+                                className="btn-primary btn-sm"
+                                onClick={() => onOpenSubmitReport(task)}
+                                style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', gap: '0.25rem' }}
+                              >
+                                <Upload size={12} />
+                                Тапсыру
+                              </button>
+                            ) : (
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.3rem',
+                                color: 'var(--color-danger)',
+                                fontSize: '0.75rem',
+                                fontWeight: 500
+                              }}>
+                                <AlertCircle size={13} />
+                                {t('docsNotSubmitted')}
+                              </span>
+                            )}
                           </td>
                         );
                       })}
@@ -345,17 +378,14 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
                       {item.file.date}
                     </span>
 
-                    <a
-                      href={item.file.url}
-                      download={item.file.name}
-                      target="_blank"
-                      rel="noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => triggerFileDownload(item.file.url, item.file.name)}
                       className="btn-primary btn-sm"
-                      style={{ textDecoration: 'none' }}
                     >
                       <Download size={14} />
                       {t('btnDownload')}
-                    </a>
+                    </button>
                   </div>
                 </div>
               ))

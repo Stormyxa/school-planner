@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 
 export default function StaffTab() {
-  const { staff, addStaffMember, isDirector, t, schoolInfo } = useAuth();
+  const { staff, addStaffMember, currentUser, isDirector, isHeadTeacher, t, schoolInfo } = useAuth();
 
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -25,6 +25,21 @@ export default function StaffTab() {
   const [showCardsModal, setShowCardsModal] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
   const [copiedAll, setCopiedAll] = useState(false);
+
+  // Права просмотра логина и пароля:
+  // Директор видит всех, Завуч видит только учителей, Учитель не видит чужих паролей
+  const canViewMemberCredentials = (member) => {
+    if (isDirector) return true;
+    if (isHeadTeacher && member.role === 'teacher') return true;
+    return false;
+  };
+
+  // Список сотрудников для талонов и рассылки в мессенджеры
+  const staffForCredentialsExport = isDirector
+    ? staff
+    : isHeadTeacher
+      ? staff.filter(m => m.role === 'teacher')
+      : [];
 
   // Форма добавления сотрудника
   const [name, setName] = useState('');
@@ -53,10 +68,10 @@ export default function StaffTab() {
     setTimeout(() => setCopiedId(null), 2500);
   };
 
-  // Копирование всего списка для цифровой рассылки в WhatsApp / Telegram
+  // Копирование списка для цифровой рассылки в WhatsApp / Telegram
   const handleCopyAllForMessengers = () => {
     const header = `🏫 *${schoolInfo.shortName}* — Доступы к Школьной Планёрке:\n`;
-    const list = staff.map((m, idx) => 
+    const list = staffForCredentialsExport.map((m, idx) => 
       `${idx + 1}. *${m.name}* (${m.roleTitle})\n   👤 Логин: \`${m.login}\`\n   🔑 Пароль: \`${m.passHint}\``
     ).join('\n\n');
 
@@ -128,26 +143,29 @@ export default function StaffTab() {
         </div>
 
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-          {/* Кнопка копирования для WhatsApp/Telegram */}
-          <button 
-            className="btn-secondary btn-sm" 
-            onClick={handleCopyAllForMessengers}
-            title="Скопировать все логины и пароли для отправки в WhatsApp / Telegram"
-            style={{ gap: '0.4rem', color: '#059669', borderColor: '#a7f3d0' }}
-          >
-            {copiedAll ? <Check size={15} color="var(--color-success)" /> : <Send size={15} />}
-            {copiedAll ? 'Список скопирован!' : 'Список для WhatsApp / Telegram'}
-          </button>
+          {/* Кнопки экспорта доступов: доступны только Директору и Завучу (учителя не видят паролей) */}
+          {(isDirector || isHeadTeacher) && (
+            <>
+              <button 
+                className="btn-secondary btn-sm" 
+                onClick={handleCopyAllForMessengers}
+                title="Скопировать логины и пароли для отправки в WhatsApp / Telegram"
+                style={{ gap: '0.4rem', color: '#059669', borderColor: '#a7f3d0' }}
+              >
+                {copiedAll ? <Check size={15} color="var(--color-success)" /> : <Send size={15} />}
+                {copiedAll ? 'Список скопирован!' : (isHeadTeacher ? 'Пароли учителей (мессенджеры)' : 'Список для WhatsApp / Telegram')}
+              </button>
 
-          {/* Карточки для печати */}
-          <button 
-            className="btn-secondary btn-sm" 
-            onClick={() => setShowCardsModal(true)}
-            style={{ gap: '0.4rem' }}
-          >
-            <CreditCard size={15} />
-            Карточки паролей
-          </button>
+              <button 
+                className="btn-secondary btn-sm" 
+                onClick={() => setShowCardsModal(true)}
+                style={{ gap: '0.4rem' }}
+              >
+                <CreditCard size={15} />
+                {isHeadTeacher ? 'Талоны учителей' : 'Карточки паролей'}
+              </button>
+            </>
+          )}
 
           {isDirector && (
             <button className="btn-primary btn-sm" onClick={() => setShowAddModal(true)}>
@@ -239,41 +257,43 @@ export default function StaffTab() {
               </div>
             </div>
 
-            {/* Карточка доступов для входа */}
-            <div style={{
-              backgroundColor: 'var(--bg-surface-subtle)',
-              padding: '0.65rem 0.8rem',
-              borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--border-subtle)',
-              marginTop: '0.5rem'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>
-                <span>{t('staffCredentials')}:</span>
-                <button
-                  onClick={() => handleCopyCredentials(member)}
-                  className="btn-ghost"
-                  style={{ padding: '0.15rem 0.4rem', fontSize: '0.72rem', gap: '0.25rem' }}
-                  title="Скопировать логин и пароль учителю"
-                >
-                  {copiedId === member.id ? (
-                    <>
-                      <Check size={12} color="var(--color-success)" />
-                      {t('staffCopied')}
-                    </>
-                  ) : (
-                    <>
-                      <Copy size={12} />
-                      {t('staffCopy')}
-                    </>
-                  )}
-                </button>
-              </div>
+            {/* Карточка доступов для входа: Директор видит всех, Завуч видит только учителей, Учитель не видит чужих паролей */}
+            {canViewMemberCredentials(member) && (
+              <div style={{
+                backgroundColor: 'var(--bg-surface-subtle)',
+                padding: '0.65rem 0.8rem',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--border-subtle)',
+                marginTop: '0.5rem'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>
+                  <span>{t('staffCredentials')}:</span>
+                  <button
+                    onClick={() => handleCopyCredentials(member)}
+                    className="btn-ghost"
+                    style={{ padding: '0.15rem 0.4rem', fontSize: '0.72rem', gap: '0.25rem' }}
+                    title="Скопировать логин и пароль учителю"
+                  >
+                    {copiedId === member.id ? (
+                      <>
+                        <Check size={12} color="var(--color-success)" />
+                        {t('staffCopied')}
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={12} />
+                        {t('staffCopy')}
+                      </>
+                    )}
+                  </button>
+                </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', fontFamily: 'monospace' }}>
-                <span>{t('staffLogin')}: <strong>{member.login}</strong></span>
-                <span>{t('staffPassword')}: <strong>{member.passHint}</strong></span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', fontFamily: 'monospace' }}>
+                  <span>{t('staffLogin')}: <strong>{member.login}</strong></span>
+                  <span>{t('staffPassword')}: <strong>{member.passHint}</strong></span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         ))}
       </div>
@@ -290,7 +310,9 @@ export default function StaffTab() {
             <div className="modal-header no-print">
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                 <CreditCard size={20} color="var(--color-primary)" />
-                <h2 className="modal-title">Талоны доступа для педагогов (для разрезания)</h2>
+                <h2 className="modal-title">
+                  {isHeadTeacher ? 'Талоны доступа для учителей' : 'Талоны доступа для педагогов (для разрезания)'}
+                </h2>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 <button className="btn-primary btn-sm" onClick={handlePrintCards}>
@@ -309,7 +331,7 @@ export default function StaffTab() {
                 gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
                 gap: '12px'
               }}>
-                {staff.map(member => (
+                {staffForCredentialsExport.map(member => (
                   <div
                     key={member.id}
                     style={{
