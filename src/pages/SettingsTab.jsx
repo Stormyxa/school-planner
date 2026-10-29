@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { isSupabaseConfigured, testSupabaseConnection } from '../lib/supabaseClient';
 import { NotificationService } from '../lib/notificationService';
@@ -12,7 +12,8 @@ import {
   AlertCircle,
   RefreshCw,
   Loader2,
-  Trash2
+  Trash2,
+  Wifi
 } from 'lucide-react';
 
 const GithubIcon = ({ size = 18, color = 'currentColor' }) => (
@@ -27,12 +28,49 @@ export default function SettingsTab() {
   const [pushStatus, setPushStatus] = useState(NotificationService.getPermissionStatus());
   const [testingPush, setTestingPush] = useState(false);
   const [pushTestResult, setPushTestResult] = useState(null);
+  const [deviceEndpoint, setDeviceEndpoint] = useState(null); // endpoint этого устройства
+  const [registering, setRegistering] = useState(false);
   
   // Тестирование Supabase
   const [testingDb, setTestingDb] = useState(false);
   const [dbTestResult, setDbTestResult] = useState(null);
 
   const isSupaActive = isSupabaseConfigured();
+
+  // ─── АВТОМАТИЧЕСКАЯ РЕГИСТРАЦИЯ ПРИ ОТКРЫТИИ НАСТРОЕК ──────────────────────
+  // Запускаем при каждом открытии SettingsTab чтобы убедиться что ЭТОТ браузер зарегистрирован
+  useEffect(() => {
+    let isMounted = true;
+
+    const autoRegister = async () => {
+      // 1. Узнать текущий endpoint этого браузера (без запроса разрешения)
+      try {
+        if ('serviceWorker' in navigator && 'PushManager' in window) {
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.getSubscription();
+          if (sub && isMounted) {
+            setDeviceEndpoint(sub.endpoint);
+          }
+        }
+      } catch { /* ignore */ }
+
+      // 2. Если разрешение уже выдано — тихо перерегистрировать токен устройства
+      if (Notification.permission === 'granted' && currentUser) {
+        setRegistering(true);
+        try {
+          const sub = await NotificationService.subscribePush(currentUser);
+          if (sub && isMounted) {
+            setDeviceEndpoint(sub.endpoint);
+          }
+        } catch { /* ignore */ } finally {
+          if (isMounted) setRegistering(false);
+        }
+      }
+    };
+
+    autoRegister();
+    return () => { isMounted = false; };
+  }, [currentUser]);
 
   const handleRunDbTest = async () => {
     setTestingDb(true);
@@ -50,7 +88,13 @@ export default function SettingsTab() {
     setPushStatus(NotificationService.getPermissionStatus());
     if (granted) {
       if (currentUser) {
-        await NotificationService.subscribePush(currentUser);
+        setRegistering(true);
+        try {
+          const sub = await NotificationService.subscribePush(currentUser);
+          if (sub) setDeviceEndpoint(sub.endpoint);
+        } finally {
+          setRegistering(false);
+        }
       }
       showToast?.(schoolInfo.shortName, 'Web Push уведомления успешно подключены!');
     } else {
@@ -58,29 +102,22 @@ export default function SettingsTab() {
     }
   };
 
-  const handleTestWebPushWithLock = async () => {
-    setTestingPush(true);
-    setPushTestResult(null);
-    showToast?.('Тест Web Push', 'Через 3 секунды придет пуш. Заблокируйте экран прямо сейчас!', 'task');
-
-    // 1. Сначала гарантируем регистрацию устройства текущего пользователя
-    if (currentUser) {
-      await NotificationService.subscribePush(currentUser);
-    }
-
+  const handleReRegister = async () => {
+    setRegistering(true);
     try {
-      const res = await NotificationService.sendTestWebPush(currentUser, 3);
-      if (res && res.sent > 0) {
-        setPushTestResult({ success: true, message: `Web Push успешно отправлен на сервер FCM/APNs (доставлено устройств: ${res.sent})!` });
+      const sub = await NotificationService.subscribePush(currentUser);
+      if (sub) {
+        setDeviceEndpoint(sub.endpoint);
+        showToast?.(schoolInfo.shortName, 'Токен устройства успешно обновлен в базе!');
       } else {
-        setPushTestResult({ success: false, message: `Пуш не отправлен: ${res?.reason || res?.error || 'Устройство не зарегистрировано'}` });
+        showToast?.('Push', 'Не удалось зарегистрировать. Проверьте разрешения браузера.', 'urgent');
       }
-    } catch (e) {
-      setPushTestResult({ success: false, message: e.message });
     } finally {
-      setTestingPush(false);
+      setRegistering(false);
     }
   };
+
+
 
   const handleExportBackup = () => {
     const backupData = {
@@ -237,12 +274,49 @@ export default function SettingsTab() {
               <Smartphone size={20} color="var(--color-primary-light)" />
               <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: 0 }}>PWA и W3C Web Push</h3>
             </div>
-            {pushStatus === 'granted' ? (
-              <span className="badge badge-success"><CheckCircle2 size={12} /> Разрешено</span>
-            ) : (
-              <span className="badge badge-neutral">Не включено</span>
-            )}
+            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+              {registering && <Loader2 size={14} className="pulse" style={{ color: 'var(--color-primary)' }} />}
+              {pushStatus === 'granted' ? (
+                <span className="badge badge-success"><CheckCircle2 size={12} /> Разрешено</span>
+              ) : (
+                <span className="badge badge-neutral">Не включено</span>
+              )}
+            </div>
           </div>
+
+          {/* Статус регистрации этого устройства */}
+          {pushStatus === 'granted' && (
+            <div style={{
+              padding: '0.6rem 0.8rem',
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: deviceEndpoint ? 'var(--color-success-bg)' : 'var(--color-warning-bg)',
+              color: deviceEndpoint ? 'var(--color-success-text)' : 'var(--color-warning-text)',
+              fontSize: '0.78rem',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '0.5rem',
+              marginBottom: '0.75rem'
+            }}>
+              {deviceEndpoint
+                ? <CheckCircle2 size={14} style={{ flexShrink: 0, marginTop: '2px' }} />
+                : <AlertCircle size={14} style={{ flexShrink: 0, marginTop: '2px' }} />
+              }
+              <div>
+                {deviceEndpoint ? (
+                  <>
+                    <strong>Это устройство зарегистрировано</strong><br />
+                    <span style={{ fontSize: '0.71rem', opacity: 0.8 }}>
+                      {deviceEndpoint.replace('https://fcm.googleapis.com/fcm/send/', 'FCM: ').substring(0, 55)}...
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <strong>Это устройство НЕ зарегистрировано</strong> — нажмите «Перерегистрировать»
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
           <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
             Настоящие фоновые пуши по протоколу W3C Web Push (FCM / APNs). Доставляются на экран блокировки смартфона или ПК даже при закрытом приложении.
@@ -253,6 +327,7 @@ export default function SettingsTab() {
               <button 
                 className="btn-primary btn-sm"
                 onClick={handleRequestPush}
+                disabled={registering}
                 style={{ width: '100%', justifyContent: 'center' }}
               >
                 <Bell size={15} />
@@ -261,25 +336,40 @@ export default function SettingsTab() {
             ) : (
               <>
                 <button 
-                  className="btn-primary btn-sm"
-                  onClick={handleTestWebPushWithLock}
-                  disabled={testingPush}
+                  className="btn-secondary btn-sm"
+                  onClick={handleReRegister}
+                  disabled={registering}
                   style={{ width: '100%', justifyContent: 'center' }}
                 >
-                  {testingPush ? <Loader2 size={15} className="pulse" /> : <Bell size={15} />}
-                  {testingPush ? 'Отправка через 3 секунды (заблокируйте экран)...' : 'Тест Web Push: заблокируйте экран (таймер 3с)'}
+                  {registering ? <Loader2 size={14} className="pulse" /> : <RefreshCw size={13} />}
+                  {registering ? 'Регистрация...' : 'Перерегистрировать это устройство'}
                 </button>
 
                 <button 
-                  className="btn-secondary btn-sm"
+                  className="btn-ghost btn-sm"
                   onClick={async () => {
-                    await NotificationService.subscribePush(currentUser);
-                    showToast?.(schoolInfo.shortName, 'Токен устройства успешно обновлен!');
+                    setTestingPush(true);
+                    setPushTestResult(null);
+                    showToast?.('Тест Web Push', 'Через 3 сек придёт пуш — заблокируйте экран!', 'task');
+                    if (currentUser) await NotificationService.subscribePush(currentUser);
+                    try {
+                      const res = await NotificationService.sendTestWebPush(currentUser, 3);
+                      if (res && res.sent > 0) {
+                        setPushTestResult({ success: true, message: `FCM принял пуш (устройств: ${res.sent}). Если на экране блокировки НЕ появился — читай инструкцию ниже.` });
+                      } else {
+                        setPushTestResult({ success: false, message: `Пуш не принят FCM: ${res?.reason || res?.error || 'устройство не зарегистрировано'}` });
+                      }
+                    } catch (e) {
+                      setPushTestResult({ success: false, message: e.message });
+                    } finally {
+                      setTestingPush(false);
+                    }
                   }}
+                  disabled={testingPush}
                   style={{ width: '100%', justifyContent: 'center', fontSize: '0.78rem' }}
                 >
-                  <RefreshCw size={13} />
-                  Перерегистрировать токен устройства
+                  {testingPush ? <Loader2 size={14} className="pulse" /> : <Bell size={13} />}
+                  {testingPush ? 'Отправка через 3с (заблокируй экран)...' : 'Тест фонового пуша (заблокируй экран)'}
                 </button>
               </>
             )}
@@ -300,11 +390,35 @@ export default function SettingsTab() {
               </div>
             )}
 
-            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.4, marginTop: '0.25rem' }}>
-              ℹ️ <strong>Для iOS (iPhone):</strong> Нажмите «Поделиться» ➔ «На экран Домой», запустите созданную иконку PWA и включите уведомления.
+            {/* Инструкции для фонового получения пушей */}
+            <div style={{
+              marginTop: '0.5rem',
+              padding: '0.75rem',
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'var(--bg-surface-subtle)',
+              fontSize: '0.75rem',
+              color: 'var(--text-secondary)',
+              lineHeight: 1.5
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem', fontWeight: 600 }}>
+                <Wifi size={13} />
+                Если пуши не приходят при закрытом приложении:
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <div>
+                  <strong>📱 Android:</strong> Настройки → Приложения → Chrome → Батарея → выбери <strong>«Без ограничений»</strong>. Стандартный режим блокирует FCM.
+                </div>
+                <div>
+                  <strong>💻 ПК (Windows/Mac):</strong> В Chrome: Настройки → Дополнительно → Система → включи <strong>«Запускать фоновые приложения после закрытия»</strong>.
+                </div>
+                <div>
+                  <strong>🍎 iPhone/iPad:</strong> Установи PWA через Safari «Поделиться → На экран Домой», запускай только через иконку PWA. Требуется iOS 16.4+.
+                </div>
+              </div>
             </div>
           </div>
         </div>
+
 
         {/* Блок 4: Резервное копирование и кэш */}
         <div className="card">
