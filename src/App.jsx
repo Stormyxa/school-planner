@@ -13,11 +13,11 @@ import NewTaskModal from './components/NewTaskModal';
 import NewMeetingModal from './components/NewMeetingModal';
 import SubmitReportModal from './components/SubmitReportModal';
 import TaskDetailModal from './components/TaskDetailModal';
+import NotificationToast from './components/NotificationToast';
 
 function AppContent() {
   const { currentUser } = useAuth();
 
-  // Сохраняем и восстанавливаем выбранную вкладку при перезагрузке
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem('sp_active_tab_kz43') || 'dashboard';
   });
@@ -26,13 +26,11 @@ function AppContent() {
     localStorage.setItem('sp_active_tab_kz43', activeTab);
   }, [activeTab]);
   
-  // Состояния модальных окон
   const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
   const [isNewMeetingOpen, setIsNewMeetingOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [taskToSubmit, setTaskToSubmit] = useState(null);
 
-  // Если не авторизован — показываем экран входа
   if (!currentUser) {
     return <LoginScreen />;
   }
@@ -46,12 +44,12 @@ function AppContent() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: 'var(--bg-primary)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: 'var(--bg-primary)', width: '100%', maxWidth: '100vw', overflowX: 'hidden' }}>
       {/* Шапка приложения */}
       <Header />
 
-      {/* Основной макет: Боковая панель + Контент страницы */}
-      <div style={{ display: 'flex', flex: 1 }}>
+      {/* Основной макет */}
+      <div style={{ display: 'flex', flex: 1, width: '100%', maxWidth: '100vw', overflowX: 'hidden' }}>
         <Sidebar 
           activeTab={activeTab} 
           setActiveTab={setActiveTab}
@@ -65,7 +63,9 @@ function AppContent() {
           maxWidth: '1280px',
           margin: '0 auto',
           width: '100%',
-          paddingBottom: '5rem'
+          boxSizing: 'border-box',
+          overflowX: 'hidden',
+          paddingBottom: '5.5rem'
         }}>
           {activeTab === 'dashboard' && (
             <DashboardTab 
@@ -106,6 +106,9 @@ function AppContent() {
           )}
         </main>
       </div>
+
+      {/* Живые всплывающие тост-уведомления */}
+      <NotificationToast />
 
       {/* Модальные окна */}
       <NewTaskModal 

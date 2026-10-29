@@ -12,11 +12,23 @@ import {
   Clock, 
   Tag, 
   AlertTriangle,
-  XCircle
+  XCircle,
+  Archive,
+  ArchiveRestore
 } from 'lucide-react';
 
 export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitReport }) {
-  const { currentUser, isDirector, isHeadTeacher, updateTaskStatus, cancelTask, t } = useAuth();
+  const { 
+    currentUser, 
+    isDirector, 
+    isHeadTeacher, 
+    updateTaskStatus, 
+    cancelTask, 
+    t, 
+    lang,
+    toggleArchiveTask, 
+    isTaskArchived 
+  } = useAuth();
   
   const [reviewNote, setReviewNote] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
@@ -354,6 +366,19 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
                   </button>
                 )}
               </>
+            )}
+            {task.status === 'completed' && (
+              <button 
+                type="button"
+                className="btn-secondary btn-sm" 
+                onClick={() => toggleArchiveTask(task.id)}
+                title="Архивировать для себя"
+              >
+                {isTaskArchived(task) ? <ArchiveRestore size={15} color="#0284c7" /> : <Archive size={15} />}
+                {isTaskArchived(task) 
+                  ? (lang === 'kk' ? 'Мұрағаттан шығару' : 'Из архива') 
+                  : (lang === 'kk' ? 'Мұрағатқа' : 'В архив')}
+              </button>
             )}
             <button className="btn-secondary" onClick={onClose}>
               {t('btnClose')}

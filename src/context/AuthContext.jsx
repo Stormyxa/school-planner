@@ -78,7 +78,84 @@ export function AuthProvider({ children }) {
     return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
   });
 
-  // 6. Тема оформления
+  // Всплывающий живой тост (In-App Toast)
+  const [toast, setToast] = useState(null);
+
+  const showToast = useCallback((title, message, type = 'task') => {
+    setToast({
+      id: `toast-${Date.now()}`,
+      title,
+      message,
+      type
+    });
+  }, []);
+
+  const dismissToast = useCallback(() => {
+    setToast(null);
+  }, []);
+
+  // Автозакрытие тоста через 6 секунд
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => {
+      setToast(null);
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  // 6. Персональный архив поручений пользователя (только для выполненных!)
+  const [archivedTaskIds, setArchivedTaskIds] = useState(() => {
+    const userId = currentUser?.id || 'guest';
+    const saved = localStorage.getItem(`sp_archived_tasks_v2_${userId}`);
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  useEffect(() => {
+    if (currentUser?.id) {
+      const saved = localStorage.getItem(`sp_archived_tasks_v2_${currentUser.id}`);
+      setArchivedTaskIds(saved ? JSON.parse(saved) : []);
+    }
+  }, [currentUser?.id]);
+
+  const toggleArchiveTask = useCallback((taskId) => {
+    const task = tasks.find(t => t.id === taskId);
+    // СТРОГОЕ УСЛОВИЕ: архивировать можно ТОЛЬКО выполненные поручения!
+    if (!task || task.status !== 'completed') {
+      showToast(
+        lang === 'kk' ? 'Ескерту' : 'Внимание',
+        lang === 'kk' 
+          ? 'Тек қабылданған (орындалған) тапсырмаларды ғана мұрағаттауға болады!' 
+          : 'В архив можно отправлять только выполненные (принятые) поручения!',
+        'urgent'
+      );
+      return;
+    }
+
+    setArchivedTaskIds(prev => {
+      const isAlready = prev.includes(taskId);
+      const updated = isAlready ? prev.filter(id => id !== taskId) : [...prev, taskId];
+      const userId = currentUser?.id || 'guest';
+      localStorage.setItem(`sp_archived_tasks_v2_${userId}`, JSON.stringify(updated));
+
+      showToast(
+        isAlready ? (lang === 'kk' ? 'Мұрағаттан шығарылды' : 'Извлечено из архива') : (lang === 'kk' ? 'Мұрағатқа жіберілді' : 'Отправлено в архив'),
+        `«${task.title}»`,
+        'task'
+      );
+      return updated;
+    });
+  }, [tasks, currentUser?.id, lang, showToast]);
+
+  const isTaskArchived = useCallback((task) => {
+    if (task.status !== 'completed') return false;
+    if (archivedTaskIds.includes(task.id)) return true;
+
+    // Автоархив старше 24ч для выполненных
+    const completedTime = task.reviewedAt ? new Date(task.reviewedAt).getTime() : new Date(task.deadline).getTime();
+    return (Date.now() - completedTime) >= (24 * 60 * 60 * 1000);
+  }, [archivedTaskIds]);
+
+  // 7. Тема оформления
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('sp_theme') || 'light';
   });
@@ -86,7 +163,7 @@ export function AuthProvider({ children }) {
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState(Date.now());
 
-  // 7. PWA установка для десктопа и смартфонов
+  // 8. PWA установка для десктопа и смартфонов
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isPwaInstalled, setIsPwaInstalled] = useState(false);
 
@@ -174,7 +251,6 @@ export function AuthProvider({ children }) {
     return null;
   }, [staff]);
 
-  // Ссылки для предотвращения гонок состояний
   const staffRef = useRef(staff);
   staffRef.current = staff;
   const currentUserRef = useRef(currentUser);
@@ -219,7 +295,6 @@ export function AuthProvider({ children }) {
           return merged;
         });
 
-        // Обновляем текущего пользователя, если данные изменились
         const current = currentUserRef.current;
         if (current) {
           const fresh = mappedStaff.find(s => s.id === current.id || (s.login && s.login.toLowerCase() === current.login?.toLowerCase()));
@@ -261,7 +336,6 @@ export function AuthProvider({ children }) {
           };
         });
 
-        // Сохраняем локальные оптимистичные задачи (id: task-...) пока они не появились в Supabase
         setTasks(prev => {
           const localOnly = prev.filter(p => typeof p.id === 'string' && p.id.startsWith('task-'));
           const existingIds = new Set(mappedTasks.map(m => m.id));
@@ -299,11 +373,11 @@ export function AuthProvider({ children }) {
         });
       }
 
-      // 4. Уведомления текущего пользователя
+      // 4. Уведомления текущего пользователя из Supabase
       const activeUser = currentUserRef.current;
       const userUuid = activeUser ? resolveProfileUuid(activeUser.id || activeUser.login) : null;
 
-      let notifQuery = supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(35);
+      let notifQuery = supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(40);
       if (userUuid) {
         notifQuery = notifQuery.or(`user_id.eq.${userUuid},user_id.is.null`);
       } else {
@@ -322,7 +396,6 @@ export function AuthProvider({ children }) {
         }));
 
         setNotifications(prev => {
-          // Объединяем, сохраняя локально полученные уведомления
           const map = new Map();
           mappedN.forEach(n => map.set(n.id, n));
           prev.forEach(p => {
@@ -347,7 +420,7 @@ export function AuthProvider({ children }) {
     loadFromSupabase(false);
   }, [loadFromSupabase, currentUser?.id]);
 
-  // ЖИВОЕ ОБНОВЛЕНИЕ: Supabase Realtime Channels (WebSockets)
+  // Живое обновление через Realtime WebSockets
   useEffect(() => {
     if (!isSupabaseConfigured() || !supabase) return;
 
@@ -372,7 +445,7 @@ export function AuthProvider({ children }) {
     };
   }, [loadFromSupabase]);
 
-  // НАДЕЖНЫЙ ФОЛЛБЕК-ПУЛИНГ: каждые 6-8 секунд проверяет изменения без перезагрузки страницы (F5)
+  // Фоновый тихий опрос каждые 7 секунд (только когда страница открыта)
   useEffect(() => {
     if (!isSupabaseConfigured() || !supabase) return;
 
@@ -400,6 +473,7 @@ export function AuthProvider({ children }) {
       NotificationService.send('КГУ «СШ № 43»', {
         body: `Вы вошли как: ${target.name} (${target.roleTitle})`
       });
+      showToast('КГУ «СШ № 43»', `Вы вошли как: ${target.name}`);
     }
   };
 
@@ -408,7 +482,6 @@ export function AuthProvider({ children }) {
     const cleanLogin = login.trim().toLowerCase();
     const cleanPass = password.trim();
 
-    // 1. Проверка в Supabase
     if (isSupabaseConfigured() && supabase) {
       try {
         const { data, error } = await supabase
@@ -433,7 +506,6 @@ export function AuthProvider({ children }) {
               avatar: data.avatar || (data.full_name ? data.full_name.split(' ').map(n => n[0]).slice(0, 2).join('') : 'СШ')
             };
             setCurrentUser(userObj);
-            // Запрашиваем разрешение на уведомления после успешного входа
             NotificationService.requestPermission();
             return { success: true };
           }
@@ -444,7 +516,6 @@ export function AuthProvider({ children }) {
       }
     }
 
-    // 2. Локальная проверка
     const user = staff.find(s => s.login?.toLowerCase() === cleanLogin || s.email?.toLowerCase() === cleanLogin);
     if (user) {
       if (user.passHint === cleanPass || cleanPass === 'admin' || cleanPass === 'school43kz') {
@@ -463,14 +534,26 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('sp_current_user_kz43');
   };
 
-  // Отправка уведомлений: строго адресату, без уведомления самого себя
+  // Отправка уведомлений
   const dispatchNotification = async ({ targetUserId, targetRole, title, message, type = 'task' }) => {
-    // Не уведомляем автора действия
-    if (targetUserId && targetUserId === currentUser?.id) {
-      return;
-    }
+    // 1. Показываем живой всплывающий тост прямо на странице
+    showToast(title, message, type);
 
-    // 1. Запись в Supabase notifications
+    // 2. Системный пуш в браузер
+    NotificationService.send(title, { body: message });
+
+    // 3. Сохраняем в локальный список
+    const localNotif = {
+      id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      title,
+      message,
+      time: 'Только что',
+      read: false,
+      type
+    };
+    setNotifications(prev => [localNotif, ...prev]);
+
+    // 4. Запись в Supabase notifications для других пользователей
     if (isSupabaseConfigured() && supabase) {
       try {
         if (targetUserId) {
@@ -483,7 +566,6 @@ export function AuthProvider({ children }) {
             is_read: false
           }]);
         } else if (targetRole === 'all') {
-          // Всем педагогам, кроме текущего
           const otherStaff = staff.filter(s => s.id !== currentUser?.id && s.login !== currentUser?.login);
           const inserts = otherStaff.map(s => ({
             user_id: resolveProfileUuid(s.id || s.login),
@@ -496,7 +578,6 @@ export function AuthProvider({ children }) {
           if (inserts.length > 0) {
             await supabase.from('notifications').insert(inserts);
           } else {
-            // Общее широковещательное уведомление
             await supabase.from('notifications').insert([{
               user_id: null,
               title,
@@ -509,20 +590,6 @@ export function AuthProvider({ children }) {
       } catch (err) {
         console.warn('Supabase notification dispatch error:', err.message);
       }
-    }
-
-    // 2. Локальное уведомление в браузере (если целевой пользователь совпадает)
-    if (targetUserId && (targetUserId === currentUser?.id || targetUserId === currentUser?.login)) {
-      const localNotif = {
-        id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        title,
-        message,
-        time: 'Только что',
-        read: false,
-        type
-      };
-      setNotifications(prev => [localNotif, ...prev]);
-      NotificationService.send(title, { body: message });
     }
   };
 
@@ -545,9 +612,12 @@ export function AuthProvider({ children }) {
 
       const newAlerts = [];
 
-      // Проверка задач текущего пользователя
+      // Проверка задач
       tasks.forEach(t => {
-        const isMyTask = t.assignedToId === currentUser.id || t.assignedToName?.includes(currentUser.name);
+        const isMyTask = t.assignedToId === currentUser.id || 
+                         t.assignedToName?.includes(currentUser.name) ||
+                         (currentUser.role === 'director'); // Директор видит просрочки по всей школе
+
         if (isMyTask && t.status !== 'completed' && t.status !== 'cancelled') {
           const deadlineDate = new Date(t.deadline);
           const deadlineMs = deadlineDate.getTime();
@@ -559,8 +629,8 @@ export function AuthProvider({ children }) {
               remindedKeys.add(key);
               newAlerts.push({
                 id: `alert-${Date.now()}-${t.id}`,
-                title: '⚠️ Мерзімі өтті! / Срок поручения истек',
-                message: `«${t.title}» бойынша дедлайн (${t.deadline}) өтіп кетті. Шұғыл есеп тапсырыңыз!`,
+                title: '⚠️ Мерзімі өтті! / Срок истек',
+                message: `«${t.title}» (${t.assignedToName}) бойынша дедлайн (${t.deadline}) өтті!`,
                 time: 'Только что',
                 read: false,
                 type: 'urgent'
@@ -573,13 +643,13 @@ export function AuthProvider({ children }) {
               newAlerts.push({
                 id: `alert-${Date.now()}-${t.id}`,
                 title: '⏰ Бүгін дедлайн / Срок сдачи сегодня',
-                message: `«${t.title}» — бүгін соңғы мерзім! Есепті тапсыруды ұмытпаңыз.`,
+                message: `«${t.title}» — бүгін соңғы күн!`,
                 time: 'Только что',
                 read: false,
                 type: 'urgent'
               });
             }
-          } else if (diffDays === 1) {
+          } else if (diffDays === 1 && (t.assignedToId === currentUser.id)) {
             const key = `due_tomorrow_${t.id}_${t.deadline}`;
             if (!remindedKeys.has(key)) {
               remindedKeys.add(key);
@@ -605,7 +675,7 @@ export function AuthProvider({ children }) {
             newAlerts.push({
               id: `alert-${Date.now()}-${m.id}`,
               title: '🔔 Бүгін планёрка / Сегодня планёрка',
-              message: `«${m.title}» сағат ${m.time}-де (${m.location}). Барлық қатысушылар жиналуы тиіс.`,
+              message: `«${m.title}» сағат ${m.time}-де (${m.location}).`,
               time: 'Только что',
               read: false,
               type: 'meeting'
@@ -617,6 +687,7 @@ export function AuthProvider({ children }) {
       if (newAlerts.length > 0) {
         setNotifications(prev => [...newAlerts, ...prev]);
         newAlerts.forEach(alert => {
+          showToast(alert.title, alert.message, alert.type);
           NotificationService.send(alert.title, { body: alert.message });
         });
         sessionStorage.setItem('sp_reminded_keys_kz43', JSON.stringify(Array.from(remindedKeys)));
@@ -626,7 +697,7 @@ export function AuthProvider({ children }) {
     checkDeadlinesAndMeetings();
     const interval = setInterval(checkDeadlinesAndMeetings, 2 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [currentUser, tasks, meetings]);
+  }, [currentUser, tasks, meetings, showToast]);
 
   // Добавление задачи
   const addTask = async (taskData) => {
@@ -646,7 +717,7 @@ export function AuthProvider({ children }) {
         const assignedUuid = resolveProfileUuid(newTask.assignedToId);
         const createdUuid = resolveProfileUuid(currentUser?.id);
 
-        const { data, error } = await supabase.from('tasks').insert([{
+        const { data } = await supabase.from('tasks').insert([{
           title: newTask.title,
           description: newTask.description,
           assigned_to_id: assignedUuid,
@@ -668,7 +739,6 @@ export function AuthProvider({ children }) {
       }
     }
 
-    // Уведомление исполнителю
     dispatchNotification({
       targetUserId: newTask.assignedToId,
       title: 'Жаңа тапсырма / Новое поручение',
@@ -813,14 +883,12 @@ export function AuthProvider({ children }) {
     }
 
     const recipientId = targetTask?.createdById || staff.find(s => s.role === 'director')?.id;
-    if (recipientId && recipientId !== currentUser?.id) {
-      dispatchNotification({
-        targetUserId: recipientId,
-        title: 'Есеп тексеруге жіберілді / Отчет сдан',
-        message: `${currentUser?.name} сдал(а) отчет по задаче «${targetTask?.title || 'Поручение'}»`,
-        type: 'file'
-      });
-    }
+    dispatchNotification({
+      targetUserId: recipientId,
+      title: 'Есеп тексеруге жіберілді / Отчет сдан',
+      message: `${currentUser?.name} сдал(а) отчет по задаче «${targetTask?.title || 'Поручение'}»`,
+      type: 'file'
+    });
   };
 
   // Назначение планёрки
@@ -991,6 +1059,14 @@ export function AuthProvider({ children }) {
       deleteMeeting,
       addStaffMember,
       markAllNotificationsRead,
+      // Живые тосты
+      toast,
+      showToast,
+      dismissToast,
+      // Архивирование поручений (строго для выполненных)
+      archivedTaskIds,
+      toggleArchiveTask,
+      isTaskArchived,
       // PWA интеграция
       deferredPrompt,
       isPwaInstalled,
