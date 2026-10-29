@@ -257,16 +257,21 @@ export function AuthProvider({ children }) {
   showToastRef.current = showToast;
   const loadFromSupabaseRef = useRef(null);
 
-  // Набор ID уведомлений, о которых пользователь УЖЕ получил push/toast (сохраняется в sessionStorage)
+  // Набор ID уведомлений, о которых пользователь УЖЕ получил push/toast.
+  // ВАЖНО: localStorage — не сбрасывается при перезагрузке страницы (в отличие от sessionStorage)!
   const alertedNotifIdsRef = useRef(new Set());
   try {
-    const savedAlerted = sessionStorage.getItem('sp_alerted_notif_ids_kz');
+    const savedAlerted = localStorage.getItem('sp_alerted_notif_ids_kz');
     if (savedAlerted) {
       alertedNotifIdsRef.current = new Set(JSON.parse(savedAlerted));
     }
   } catch {
     // fallback
   }
+
+  // Порог свежести: показываем toast/push только для уведомлений НЕ старше 5 минут.
+  // Это защита от массового дублирования при перезагрузке сайта.
+  const NOTIF_FRESH_MS = 5 * 60 * 1000; // 5 минут
 
   // ==========================================================================
   // ГЛАВНАЯ ФУНКЦИЯ ДИНАМИЧЕСКОЙ СИНХРОНИЗАЦИИ С SUPABASE
@@ -409,18 +414,37 @@ export function AuthProvider({ children }) {
           }));
 
           // Находим новые непрочитанные уведомления, о которых пользователь ещё НЕ был оповещен
-          const unalerted = mappedN.filter(n => !n.read && !alertedNotifIdsRef.current.has(n.id));
+          const now = Date.now();
+          const unalerted = mappedN.filter(n => {
+            if (n.read) return false;
+            if (alertedNotifIdsRef.current.has(n.id)) return false;
+            // Только свежие уведомления (не старше 5 минут) показываем как toast/push.
+            // Более старые тихо добавляются в список уведомлений без повторного алерта.
+            const createdAt = supaNotifs.find(s => s.id === n.id)?.created_at;
+            if (createdAt) {
+              const age = now - new Date(createdAt).getTime();
+              if (age > NOTIF_FRESH_MS) {
+                // Помечаем как «уже оповещённое», чтобы в будущем не дублировать
+                alertedNotifIdsRef.current.add(n.id);
+                return false;
+              }
+            }
+            return true;
+          });
+
           if (unalerted.length > 0) {
             unalerted.forEach(n => {
               alertedNotifIdsRef.current.add(n.id);
               showToastRef.current(n.title, n.message, n.type, n.taskId);
               NotificationService.send(n.title, { body: n.message, taskId: n.taskId });
             });
-            try {
-              sessionStorage.setItem('sp_alerted_notif_ids_kz', JSON.stringify(Array.from(alertedNotifIdsRef.current).slice(-100)));
-            } catch {
-              // ignore
-            }
+          }
+
+          // Сохраняем актуальный список в localStorage (переживает перезагрузку!)
+          try {
+            localStorage.setItem('sp_alerted_notif_ids_kz', JSON.stringify(Array.from(alertedNotifIdsRef.current).slice(-200)));
+          } catch {
+            // ignore
           }
 
           setNotifications(prev => {
@@ -496,7 +520,7 @@ export function AuthProvider({ children }) {
             // Запоминаем ID, чтобы фоновый опрос не дублировал алерт
             alertedNotifIdsRef.current.add(notif.id);
             try {
-              sessionStorage.setItem('sp_alerted_notif_ids_kz', JSON.stringify(Array.from(alertedNotifIdsRef.current).slice(-100)));
+              localStorage.setItem('sp_alerted_notif_ids_kz', JSON.stringify(Array.from(alertedNotifIdsRef.current).slice(-200)));
             } catch {}
 
             const taskId = notif.task_id || null;
@@ -776,7 +800,7 @@ export function AuthProvider({ children }) {
 
       let remindedKeys = new Set();
       try {
-        const stored = sessionStorage.getItem('sp_reminded_keys_kz43');
+        const stored = localStorage.getItem('sp_reminded_keys_kz43');
         if (stored) remindedKeys = new Set(JSON.parse(stored));
       } catch {
         // ignore
@@ -862,7 +886,7 @@ export function AuthProvider({ children }) {
           showToast(alert.title, alert.message, alert.type);
           NotificationService.send(alert.title, { body: alert.message });
         });
-        sessionStorage.setItem('sp_reminded_keys_kz43', JSON.stringify(Array.from(remindedKeys)));
+        localStorage.setItem('sp_reminded_keys_kz43', JSON.stringify(Array.from(remindedKeys)));
       }
     };
 

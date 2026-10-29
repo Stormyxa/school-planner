@@ -203,3 +203,48 @@ BEGIN
   END IF;
 END $$;
 
+-- ==========================================================================
+-- 7. СЕРВЕРНЫЙ ТРИГГЕР WEB PUSH: АВТОМАТИЧЕСКИЙ ВЫЗОВ /api/push ПРИ КАЖДОМ
+--    НОВОМ УВЕДОМЛЕНИИ — РАБОТАЕТ ДАЖЕ КОГДА ВСЕ КЛИЕНТЫ ОФЛАЙН!
+-- ==========================================================================
+-- Расширение pg_net встроено в Supabase по умолчанию.
+-- ЗАМЕНИТЕ URL на реальный адрес вашего Vercel деплоя!
+
+CREATE EXTENSION IF NOT EXISTS pg_net;
+
+-- Функция-триггер: вызывается при каждом INSERT в public.notifications
+CREATE OR REPLACE FUNCTION public.trigger_web_push_on_notification()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE
+  push_url TEXT;
+  push_payload JSONB;
+BEGIN
+  -- !! ЗАМЕНИТЕ на URL вашего Vercel деплоя !!
+  push_url := 'https://school-planner-xi.vercel.app/api/push';
+
+  push_payload := jsonb_build_object(
+    'targetUserId', NEW.user_id,
+    'title',        NEW.title,
+    'message',      NEW.message,
+    'type',         COALESCE(NEW.type, 'task'),
+    'taskId',       NEW.task_id,
+    'source',       'db_trigger'
+  );
+
+  -- Асинхронный HTTP POST — не блокирует транзакцию
+  PERFORM net.http_post(
+    url     := push_url,
+    body    := push_payload,
+    headers := '{"Content-Type": "application/json"}'::JSONB
+  );
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_notification_inserted ON public.notifications;
+CREATE TRIGGER on_notification_inserted
+  AFTER INSERT ON public.notifications
+  FOR EACH ROW
+  EXECUTE FUNCTION public.trigger_web_push_on_notification();
+
