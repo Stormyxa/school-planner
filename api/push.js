@@ -266,10 +266,12 @@ export default async function handler(req, res) {
           });
           return { success: true };
         } catch (err) {
-          // Если токен устарел (404/410) — удаляем недействительную подписку
-          if (err.statusCode === 404 || err.statusCode === 410) {
+          // Удаляем подписку если: токен устарел (404/410) ИЛИ ключи невалидны (тестовые/фейковые данные)
+          const isExpired = err.statusCode === 404 || err.statusCode === 410;
+          const isInvalidKeys = err.message && (err.message.includes('p256dh') || err.message.includes('auth value') || err.message.includes('bytes long'));
+          if (isExpired || isInvalidKeys) {
             await supabase.from('push_subscriptions').delete().eq('id', s.id).catch(() => {});
-            console.log('[push] Removed expired subscription endpoint');
+            console.log(`[push] Removed ${isExpired ? 'expired' : 'invalid-keys'} subscription: ${s.id}`);
           } else {
             console.warn('[push] Send error:', err.statusCode, err.message);
           }
