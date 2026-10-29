@@ -94,7 +94,6 @@ export function AuthProvider({ children }) {
     setToast(null);
   }, []);
 
-  // Автозакрытие тоста через 6 секунд
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => {
@@ -119,7 +118,6 @@ export function AuthProvider({ children }) {
 
   const toggleArchiveTask = useCallback((taskId) => {
     const task = tasks.find(t => t.id === taskId);
-    // СТРОГОЕ УСЛОВИЕ: архивировать можно ТОЛЬКО выполненные поручения!
     if (!task || task.status !== 'completed') {
       showToast(
         lang === 'kk' ? 'Ескерту' : 'Внимание',
@@ -150,7 +148,6 @@ export function AuthProvider({ children }) {
     if (task.status !== 'completed') return false;
     if (archivedTaskIds.includes(task.id)) return true;
 
-    // Автоархив старше 24ч для выполненных
     const completedTime = task.reviewedAt ? new Date(task.reviewedAt).getTime() : new Date(task.deadline).getTime();
     return (Date.now() - completedTime) >= (24 * 60 * 60 * 1000);
   }, [archivedTaskIds]);
@@ -420,12 +417,25 @@ export function AuthProvider({ children }) {
     loadFromSupabase(false);
   }, [loadFromSupabase, currentUser?.id]);
 
-  // Живое обновление через Realtime WebSockets
+  // Живое обновление через Realtime WebSockets: слушаем входящие уведомления для СЕБЯ
   useEffect(() => {
     if (!isSupabaseConfigured() || !supabase) return;
 
     const channel = supabase
       .channel('school_planner_realtime_kz')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
+        const notif = payload.new;
+        const current = currentUserRef.current;
+        if (!current) return;
+        const myUuid = resolveProfileUuid(current.id || current.login);
+
+        // Уведомление предназначается МНЕ
+        if (notif.user_id === myUuid || notif.user_id === null) {
+          showToast(notif.title, notif.message, notif.type || 'task');
+          NotificationService.send(notif.title, { body: notif.message });
+          loadFromSupabase(true);
+        }
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
         loadFromSupabase(true);
       })
@@ -435,15 +445,12 @@ export function AuthProvider({ children }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
         loadFromSupabase(true);
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => {
-        loadFromSupabase(true);
-      })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [loadFromSupabase]);
+  }, [loadFromSupabase, resolveProfileUuid, showToast]);
 
   // Фоновый тихий опрос каждые 7 секунд (только когда страница открыта)
   useEffect(() => {
@@ -534,29 +541,20 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('sp_current_user_kz43');
   };
 
-  // Отправка уведомлений
+  // ==========================================================================
+  // ОТПРАВКА УВЕДОМЛЕНИЙ АДРЕСАТАМ (БЕЗ ЭХО-КАМЕРЫ ДЛЯ АВТОРА ДЕЙСТВИЯ!)
+  // ==========================================================================
   const dispatchNotification = async ({ targetUserId, targetRole, title, message, type = 'task' }) => {
-    // 1. Показываем живой всплывающий тост прямо на странице
-    showToast(title, message, type);
+    // АВТОР ДЕЙСТВИЯ НИКОГДА НЕ ПОЛУЧАЕТ УВЕДОМЛЕНИЕ О СВОЕМ ЖЕ ДЕЙСТВИИ!
+    const isActorTheTarget = targetUserId && (
+      targetUserId === currentUser?.id || 
+      targetUserId === currentUser?.login
+    );
 
-    // 2. Системный пуш в браузер
-    NotificationService.send(title, { body: message });
-
-    // 3. Сохраняем в локальный список
-    const localNotif = {
-      id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      title,
-      message,
-      time: 'Только что',
-      read: false,
-      type
-    };
-    setNotifications(prev => [localNotif, ...prev]);
-
-    // 4. Запись в Supabase notifications для других пользователей
+    // Запись в Supabase notifications для АДРЕСАТА (получателя)
     if (isSupabaseConfigured() && supabase) {
       try {
-        if (targetUserId) {
+        if (targetUserId && !isActorTheTarget) {
           const targetUuid = resolveProfileUuid(targetUserId);
           await supabase.from('notifications').insert([{
             user_id: targetUuid,
@@ -566,6 +564,7 @@ export function AuthProvider({ children }) {
             is_read: false
           }]);
         } else if (targetRole === 'all') {
+          // Всем сотрудникам, КРОМЕ автора действия!
           const otherStaff = staff.filter(s => s.id !== currentUser?.id && s.login !== currentUser?.login);
           const inserts = otherStaff.map(s => ({
             user_id: resolveProfileUuid(s.id || s.login),
@@ -616,7 +615,7 @@ export function AuthProvider({ children }) {
       tasks.forEach(t => {
         const isMyTask = t.assignedToId === currentUser.id || 
                          t.assignedToName?.includes(currentUser.name) ||
-                         (currentUser.role === 'director'); // Директор видит просрочки по всей школе
+                         (currentUser.role === 'director');
 
         if (isMyTask && t.status !== 'completed' && t.status !== 'cancelled') {
           const deadlineDate = new Date(t.deadline);

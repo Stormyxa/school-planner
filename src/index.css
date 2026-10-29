@@ -452,6 +452,12 @@ input:focus, select:focus, textarea:focus {
   }
 }
 
+@media (min-width: 769px) {
+  .mobile-nav {
+    display: none !important;
+  }
+}
+
 @media (max-width: 768px) {
   .hide-on-mobile {
     display: none !important;
@@ -476,4 +482,15 @@ input:focus, select:focus, textarea:focus {
   input, select, textarea {
     font-size: 16px; /* Предотвращает зум в iOS Safari */
   }
+  /* Выпадающее окно уведомлений поверх интерфейса на смартфонах */
+  .notifications-dropdown {
+    position: fixed !important;
+    top: 56px !important;
+    left: 10px !important;
+    right: 10px !important;
+    width: auto !important;
+    max-width: calc(100vw - 20px) !important;
+    z-index: 9999 !important;
+  }
 }
+

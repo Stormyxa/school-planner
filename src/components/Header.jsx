@@ -12,8 +12,7 @@ import {
   LogOut, 
   MonitorDown,
   RefreshCw,
-  Smartphone,
-  Check
+  Smartphone
 } from 'lucide-react';
 
 export default function Header() {
@@ -80,8 +79,7 @@ export default function Header() {
         background: 'var(--bg-surface-glass)',
         width: '100%',
         maxWidth: '100vw',
-        boxSizing: 'border-box',
-        overflowX: 'hidden'
+        boxSizing: 'border-box'
       }}>
         <div className="container" style={{
           display: 'flex',
@@ -237,68 +235,79 @@ export default function Header() {
                 )}
               </button>
 
-              {/* Выпадающее окно уведомлений */}
+              {/* Выпадающее окно уведомлений (поверх всех элементов на ПК и телефоне) */}
               {showNotifMenu && (
-                <div style={{
-                  position: 'absolute',
-                  top: 'calc(100% + 8px)',
-                  right: 0,
-                  width: 'min(320px, calc(100vw - 1rem))',
-                  backgroundColor: 'var(--bg-surface-elevated)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-md)',
-                  boxShadow: 'var(--shadow-xl)',
-                  zIndex: 100,
-                  padding: '0.75rem',
-                  animation: 'slideUp 0.15s ease-out'
-                }}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: '0.6rem',
-                    paddingBottom: '0.5rem',
-                    borderBottom: '1px solid var(--border-subtle)'
+                <>
+                  <div 
+                    onClick={() => setShowNotifMenu(false)}
+                    style={{
+                      position: 'fixed',
+                      inset: 0,
+                      backgroundColor: 'rgba(0,0,0,0.3)',
+                      zIndex: 9998
+                    }}
+                  />
+                  <div className="notifications-dropdown" style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 8px)',
+                    right: 0,
+                    width: 'min(340px, calc(100vw - 1.5rem))',
+                    backgroundColor: 'var(--bg-surface-elevated)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 'var(--radius-md)',
+                    boxShadow: 'var(--shadow-xl)',
+                    zIndex: 9999,
+                    padding: '0.75rem',
+                    animation: 'slideUp 0.15s ease-out'
                   }}>
-                    <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>Хабарламалар / Уведомления</span>
-                    {unreadCount > 0 && (
-                      <button 
-                        onClick={markAllNotificationsRead}
-                        style={{ fontSize: '0.75rem', color: 'var(--color-primary-light)', padding: 0 }}
-                      >
-                        Оқу / Прочитать
-                      </button>
-                    )}
-                  </div>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '0.6rem',
+                      paddingBottom: '0.5rem',
+                      borderBottom: '1px solid var(--border-subtle)'
+                    }}>
+                      <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>Хабарламалар / Уведомления</span>
+                      {unreadCount > 0 && (
+                        <button 
+                          onClick={markAllNotificationsRead}
+                          style={{ fontSize: '0.75rem', color: 'var(--color-primary-light)', padding: 0 }}
+                        >
+                          Оқу / Прочитать
+                        </button>
+                      )}
+                    </div>
 
-                  <div style={{ maxHeight: '280px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    {notifications.length === 0 ? (
-                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>
-                        Жаңа хабарлама жоқ / Нет уведомлений
-                      </p>
-                    ) : (
-                      notifications.map(notif => (
-                        <div key={notif.id} style={{
-                          padding: '0.6rem',
-                          borderRadius: 'var(--radius-sm)',
-                          backgroundColor: notif.read ? 'transparent' : 'var(--bg-surface-subtle)',
-                          borderLeft: notif.read ? '2px solid transparent' : '3px solid #0284c7',
-                          fontSize: '0.8rem'
-                        }}>
-                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.2rem' }}>
-                            {notif.title}
+                    <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {notifications.length === 0 ? (
+                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>
+                          Жаңа хабарлама жоқ / Нет уведомлений
+                        </p>
+                      ) : (
+                        notifications.map(notif => (
+                          <div key={notif.id} style={{
+                            padding: '0.6rem',
+                            borderRadius: 'var(--radius-sm)',
+                            backgroundColor: notif.read ? 'transparent' : 'var(--bg-surface-subtle)',
+                            borderLeft: notif.read ? '2px solid transparent' : '3px solid #0284c7',
+                            fontSize: '0.8rem'
+                          }}>
+                            <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.2rem' }}>
+                              {notif.title}
+                            </div>
+                            <div style={{ color: 'var(--text-secondary)', lineHeight: 1.3 }}>
+                              {notif.message}
+                            </div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
+                              {notif.time}
+                            </div>
                           </div>
-                          <div style={{ color: 'var(--text-secondary)', lineHeight: 1.3 }}>
-                            {notif.message}
-                          </div>
-                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>
-                            {notif.time}
-                          </div>
-                        </div>
-                      ))
-                    )}
+                        ))
+                      )}
+                    </div>
                   </div>
-                </div>
+                </>
               )}
             </div>
 
@@ -335,12 +344,12 @@ export default function Header() {
         </div>
       </header>
 
-      {/* БАННЕР ПРЕДЛОЖЕНИЯ ВКЛЮЧИТЬ УВЕДОМЛЕНИЯ (НА ТЕЛЕФОНЕ И ПК) */}
+      {/* БАННЕР ПРЕДЛОЖЕНИЯ ВКЛЮЧИТЬ УВЕДОМЛЕНИЯ (ПОДДЕРЖИВАЕТ И СВЕТЛУЮ, И ТЁМНУЮ ТЕМУ) */}
       {pushStatus !== 'granted' && (
         <div style={{
-          backgroundColor: '#eff6ff',
-          borderBottom: '1px solid #bfdbfe',
-          padding: '0.5rem 1rem',
+          backgroundColor: 'var(--color-primary-bg)',
+          borderBottom: '1px solid var(--border-subtle)',
+          padding: '0.55rem 1rem',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -350,8 +359,8 @@ export default function Header() {
           width: '100%',
           maxWidth: '100vw'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: '#1e40af' }}>
-            <Bell size={16} color="#0284c7" style={{ flexShrink: 0 }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: 'var(--text-primary)' }}>
+            <Bell size={16} color="var(--color-primary)" style={{ flexShrink: 0 }} />
             <span>
               <strong>Уведомления выключены:</strong> Включите пуши, чтобы вовремя узнавать о поручениях директора и планёрках!
             </span>

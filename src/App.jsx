@@ -31,6 +31,37 @@ function AppContent() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [taskToSubmit, setTaskToSubmit] = useState(null);
 
+  // Навигация клавишами 1-6 на ПК
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const targetTag = e.target?.tagName;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(targetTag) || e.target?.isContentEditable) {
+        return;
+      }
+
+      if (isNewTaskOpen || isNewMeetingOpen || selectedTask || taskToSubmit) {
+        return;
+      }
+
+      const tabsMap = {
+        '1': 'dashboard',
+        '2': 'planner',
+        '3': 'tasks',
+        '4': 'documents',
+        '5': 'staff',
+        '6': 'settings'
+      };
+
+      if (tabsMap[e.key]) {
+        e.preventDefault();
+        setActiveTab(tabsMap[e.key]);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isNewTaskOpen, isNewMeetingOpen, selectedTask, taskToSubmit]);
+
   if (!currentUser) {
     return <LoginScreen />;
   }
