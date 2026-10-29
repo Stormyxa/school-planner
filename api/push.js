@@ -64,11 +64,17 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // GET: либо публичный VAPID-ключ для браузера, либо запуск проверки дедлайнов
+  // GET: либо публичный VAPID-ключ для браузера, либо запуск проверки дедлайнов, либо диагностика
   if (req.method === 'GET') {
     const action = req.query?.action;
     if (action === 'check-deadlines') {
       return handleCheckDeadlines(res);
+    }
+    if (action === 'debug' && supabase) {
+      const { data: subs, error: subErr } = await supabase.from('push_subscriptions').select('id, user_id, updated_at');
+      const { data: profiles, error: profErr } = await supabase.from('profiles').select('id, login, full_name, role');
+      const { data: notifs, error: notifErr } = await supabase.from('notifications').select('id, user_id, title, created_at').order('created_at', { ascending: false }).limit(5);
+      return res.status(200).json({ subs, subErr: subErr?.message, profiles, profErr: profErr?.message, notifs, notifErr: notifErr?.message });
     }
     return res.status(200).json({ status: 'ok', publicKey: vapidPublicKey });
   }
