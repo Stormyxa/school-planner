@@ -23,8 +23,10 @@ const GithubIcon = ({ size = 18, color = 'currentColor' }) => (
 );
 
 export default function SettingsTab() {
-  const { schoolInfo, staff, tasks, meetings, logout } = useAuth();
+  const { schoolInfo, staff, tasks, meetings, logout, currentUser, showToast } = useAuth();
   const [pushStatus, setPushStatus] = useState(NotificationService.getPermissionStatus());
+  const [testingPush, setTestingPush] = useState(false);
+  const [pushTestResult, setPushTestResult] = useState(null);
   
   // Тестирование Supabase
   const [testingDb, setTestingDb] = useState(false);
@@ -47,9 +49,31 @@ export default function SettingsTab() {
     const granted = await NotificationService.requestPermission();
     setPushStatus(NotificationService.getPermissionStatus());
     if (granted) {
-      NotificationService.send(schoolInfo.shortName, {
-        body: 'Школьная Планёрка: уведомления успешно подключены!'
-      });
+      if (currentUser) {
+        await NotificationService.subscribePush(currentUser);
+      }
+      showToast?.(schoolInfo.shortName, 'Web Push уведомления успешно подключены!');
+    } else {
+      showToast?.('Уведомления', 'Разрешите уведомления в настройках вашего браузера/устройства', 'urgent');
+    }
+  };
+
+  const handleTestWebPushWithLock = async () => {
+    setTestingPush(true);
+    setPushTestResult(null);
+    showToast?.('Тест Web Push', 'Через 3 секунды придет пуш. Заблокируйте экран телефона прямо сейчас!', 'task');
+
+    try {
+      const res = await NotificationService.sendTestWebPush(currentUser, 3);
+      if (res.success) {
+        setPushTestResult({ success: true, message: `Web Push успешно отправлен на сервер FCM/APNs (доставлено: ${res.sent || 1})!` });
+      } else {
+        setPushTestResult({ success: false, message: `Ошибка отправки: ${res.error || res.reason || 'Неизвестная ошибка'}` });
+      }
+    } catch (e) {
+      setPushTestResult({ success: false, message: e.message });
+    } finally {
+      setTestingPush(false);
     }
   };
 
@@ -206,7 +230,7 @@ export default function SettingsTab() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
               <Smartphone size={20} color="var(--color-primary-light)" />
-              <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: 0 }}>PWA и Пуш-уведомления</h3>
+              <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: 0 }}>PWA и W3C Web Push</h3>
             </div>
             {pushStatus === 'granted' ? (
               <span className="badge badge-success"><CheckCircle2 size={12} /> Разрешено</span>
@@ -216,18 +240,64 @@ export default function SettingsTab() {
           </div>
 
           <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-            Установите ярлык планёрки на рабочий стол смартфона директора (iPhone/Android) или ПК в один клик.
+            Настоящие фоновые пуши по протоколу W3C Web Push (FCM / APNs). Доставляются на экран блокировки смартфона или ПК даже при закрытом приложении.
           </p>
 
-          <div style={{ marginTop: '1rem' }}>
-            <button 
-              className="btn-primary btn-sm"
-              onClick={handleRequestPush}
-              style={{ width: '100%', justifyContent: 'center' }}
-            >
-              <Bell size={15} />
-              {pushStatus === 'granted' ? 'Отправить тестовый пуш директора' : 'Запросить разрешение на уведомления'}
-            </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '1rem' }}>
+            {pushStatus !== 'granted' ? (
+              <button 
+                className="btn-primary btn-sm"
+                onClick={handleRequestPush}
+                style={{ width: '100%', justifyContent: 'center' }}
+              >
+                <Bell size={15} />
+                Включить фоновые Web Push уведомления
+              </button>
+            ) : (
+              <>
+                <button 
+                  className="btn-primary btn-sm"
+                  onClick={handleTestWebPushWithLock}
+                  disabled={testingPush}
+                  style={{ width: '100%', justifyContent: 'center' }}
+                >
+                  {testingPush ? <Loader2 size={15} className="pulse" /> : <Bell size={15} />}
+                  {testingPush ? 'Отправка через 3 секунды (заблокируйте экран)...' : 'Тест Web Push: заблокируйте экран (таймер 3с)'}
+                </button>
+
+                <button 
+                  className="btn-secondary btn-sm"
+                  onClick={async () => {
+                    await NotificationService.subscribePush(currentUser);
+                    showToast?.(schoolInfo.shortName, 'Токен устройства успешно обновлен!');
+                  }}
+                  style={{ width: '100%', justifyContent: 'center', fontSize: '0.78rem' }}
+                >
+                  <RefreshCw size={13} />
+                  Перерегистрировать токен устройства
+                </button>
+              </>
+            )}
+
+            {pushTestResult && (
+              <div style={{
+                padding: '0.65rem 0.8rem',
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: pushTestResult.success ? 'var(--color-success-bg)' : 'var(--color-warning-bg)',
+                color: pushTestResult.success ? 'var(--color-success-text)' : 'var(--color-warning-text)',
+                fontSize: '0.78rem',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '0.45rem'
+              }}>
+                {pushTestResult.success ? <CheckCircle2 size={15} style={{ flexShrink: 0, marginTop: '2px' }} /> : <AlertCircle size={15} style={{ flexShrink: 0, marginTop: '2px' }} />}
+                <div>{pushTestResult.message}</div>
+              </div>
+            )}
+
+            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: 1.4, marginTop: '0.25rem' }}>
+              ℹ️ <strong>Для iOS (iPhone):</strong> Нажмите «Поделиться» ➔ «На экран Домой», запустите созданную иконку PWA и включите уведомления.
+            </div>
           </div>
         </div>
 

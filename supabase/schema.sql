@@ -162,19 +162,36 @@ INSERT INTO public.profiles (
   password_hash = EXCLUDED.password_hash;
 
 -- ==========================================================================
+-- ==========================================================================
 -- 6. ТАБЛИЦА WEB PUSH ПОДПИСОК (ДЛЯ ФОНОВЫХ PUSH ПРИ ВЫКЛЮЧЕННОМ ЭКРАНЕ/ЗАКРЫТОМ БРАУЗЕРЕ)
 -- ==========================================================================
 CREATE TABLE IF NOT EXISTS public.push_subscriptions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now(),
-  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  user_login TEXT,
   endpoint TEXT NOT NULL UNIQUE,
   subscription JSONB NOT NULL,
   user_agent TEXT
 );
 
+-- Миграция: если колонка user_id была типа UUID, безопасно переводим в TEXT (для поддержки логинов и id)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'push_subscriptions' AND column_name = 'user_id' AND data_type = 'uuid'
+  ) THEN
+    ALTER TABLE public.push_subscriptions DROP CONSTRAINT IF EXISTS push_subscriptions_user_id_fkey;
+    ALTER TABLE public.push_subscriptions ALTER COLUMN user_id TYPE TEXT;
+  END IF;
+END $$;
+
+ALTER TABLE public.push_subscriptions ADD COLUMN IF NOT EXISTS user_login TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_push_subs_user ON public.push_subscriptions(user_id);
+CREATE INDEX IF NOT EXISTS idx_push_subs_login ON public.push_subscriptions(user_login);
 ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Доступ к push подпискам" ON public.push_subscriptions;
 CREATE POLICY "Доступ к push подпискам" ON public.push_subscriptions FOR ALL USING (true) WITH CHECK (true);
@@ -204,22 +221,34 @@ BEGIN
 END $$;
 
 -- ==========================================================================
--- 7. СЕРВЕРНЫЙ ТРИГГЕР WEB PUSH: АВТОМАТИЧЕСКИЙ ВЫЗОВ /api/push ПРИ КАЖДОМ
---    НОВОМ УВЕДОМЛЕНИИ — РАБОТАЕТ ДАЖЕ КОГДА ВСЕ КЛИЕНТЫ ОФЛАЙН!
+-- 7. НАСТРОЙКА АВТОМАТИЧЕСКОГО WEB PUSH ПРИ СОЗДАНИИ УВЕДОМЛЕНИЙ В БАЗЕ
 -- ==========================================================================
--- Расширение pg_net встроено в Supabase по умолчанию.
--- ЗАМЕНИТЕ URL на реальный адрес вашего Vercel деплоя!
+-- РЕКОМЕНДУЕМЫЙ СПОСОБ (через интерфейс Supabase Dashboard):
+-- 1. В панели Supabase перейдите в: Database -> Webhooks.
+-- 2. Нажмите «Create a new webhook»:
+--    - Name: send_web_push
+--    - Table: public.notifications
+--    - Events: Toggle [Insert]
+--    - Type of webhook: HTTP Request
+--    - HTTP Method: POST
+--    - URL: https://ВАШ-ПРОЕКТ.vercel.app/api/push
+--    - Headers: Content-Type: application/json
+-- 3. Нажмите Save! Теперь каждое новое уведомление автоматически вызовет /api/push на Vercel,
+--    который доставит Web Push через Apple APNs / Google FCM на все выключенные телефоны!
+--
+-- АЛЬТЕРНАТИВНЫЙ СПОСОБ (SQL-триггер через pg_net):
+-- Если вы предпочитаете настроить всё скриптом, раскомментируйте код ниже:
 
+/*
 CREATE EXTENSION IF NOT EXISTS pg_net;
 
--- Функция-триггер: вызывается при каждом INSERT в public.notifications
 CREATE OR REPLACE FUNCTION public.trigger_web_push_on_notification()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 DECLARE
   push_url TEXT;
   push_payload JSONB;
 BEGIN
-  -- !! ЗАМЕНИТЕ на URL вашего Vercel деплоя !!
+  -- ЗАМЕНИТЕ НА АДРЕС ВАШЕГО VERCEL САЙТА:
   push_url := 'https://school-planner-xi.vercel.app/api/push';
 
   push_payload := jsonb_build_object(
@@ -228,10 +257,10 @@ BEGIN
     'message',      NEW.message,
     'type',         COALESCE(NEW.type, 'task'),
     'taskId',       NEW.task_id,
+    'notifId',      NEW.id,
     'source',       'db_trigger'
   );
 
-  -- Асинхронный HTTP POST — не блокирует транзакцию
   PERFORM net.http_post(
     url     := push_url,
     body    := push_payload,
@@ -247,4 +276,6 @@ CREATE TRIGGER on_notification_inserted
   AFTER INSERT ON public.notifications
   FOR EACH ROW
   EXECUTE FUNCTION public.trigger_web_push_on_notification();
+*/
+
 

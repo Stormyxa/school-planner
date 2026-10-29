@@ -436,7 +436,6 @@ export function AuthProvider({ children }) {
             unalerted.forEach(n => {
               alertedNotifIdsRef.current.add(n.id);
               showToastRef.current(n.title, n.message, n.type, n.taskId);
-              NotificationService.send(n.title, { body: n.message, taskId: n.taskId });
             });
           }
 
@@ -525,7 +524,6 @@ export function AuthProvider({ children }) {
 
             const taskId = notif.task_id || null;
             showToastRef.current(notif.title, notif.message, notif.type || 'task', taskId);
-            NotificationService.send(notif.title, { body: notif.message, taskId });
 
             setNotifications(prev => {
               const newNotif = {
@@ -625,10 +623,8 @@ export function AuthProvider({ children }) {
     const target = staff.find(s => s.id === userId);
     if (target) {
       setCurrentUser(target);
-      NotificationService.send('КГУ «СШ № 43»', {
-        body: `Вы вошли как: ${target.name} (${target.roleTitle})`
-      });
       showToast('КГУ «СШ № 43»', `Вы вошли как: ${target.name}`);
+      NotificationService.subscribePush(target);
     }
   };
 
@@ -661,7 +657,7 @@ export function AuthProvider({ children }) {
               avatar: data.avatar || (data.full_name ? data.full_name.split(' ').map(n => n[0]).slice(0, 2).join('') : 'СШ')
             };
             setCurrentUser(userObj);
-            NotificationService.requestPermission();
+            NotificationService.subscribePush(userObj);
             return { success: true };
           }
           return { success: false, error: t('loginError') };
@@ -675,7 +671,7 @@ export function AuthProvider({ children }) {
     if (user) {
       if (user.passHint === cleanPass || cleanPass === 'admin' || cleanPass === 'school43kz') {
         setCurrentUser(user);
-        NotificationService.requestPermission();
+        NotificationService.subscribePush(user);
         return { success: true };
       }
       return { success: false, error: t('loginError') };
@@ -758,17 +754,19 @@ export function AuthProvider({ children }) {
 
       // 3. Отправляем настоящий W3C Web Push (FCM / APNs) для доставки на выключенные экраны и закрытые браузеры
       try {
-        const targetUuid = resolvedTargetUuid || (isUuid(targetUserId) ? targetUserId : null);
+        const targetIdentifier = resolvedTargetUuid || targetUserId;
         fetch('/api/push', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            targetUserId: targetUuid,
+            targetUserId: targetIdentifier,
             targetRole,
+            excludeUserId: actorUuid || currentUser?.id,
             title,
             message,
             taskId,
-            type
+            type,
+            tag: taskId ? `school43-task-${taskId}` : undefined
           })
         }).catch(() => {});
       } catch {
@@ -782,12 +780,9 @@ export function AuthProvider({ children }) {
   // Автоматическая подписка на W3C PushManager (Web Push) для получения уведомлений при закрытом браузере/экране
   useEffect(() => {
     if (currentUser) {
-      const userUuid = resolveProfileUuid(currentUser.id || currentUser.login);
-      if (userUuid && 'Notification' in window && Notification.permission === 'granted') {
-        NotificationService.subscribePush(userUuid);
-      }
+      NotificationService.subscribePush(currentUser);
     }
-  }, [currentUser, resolveProfileUuid]);
+  }, [currentUser]);
 
   // Автоматический мониторинг дедлайнов и планёрок на сегодня/завтра
   useEffect(() => {
@@ -884,7 +879,6 @@ export function AuthProvider({ children }) {
         setNotifications(prev => [...newAlerts, ...prev]);
         newAlerts.forEach(alert => {
           showToast(alert.title, alert.message, alert.type);
-          NotificationService.send(alert.title, { body: alert.message });
         });
         localStorage.setItem('sp_reminded_keys_kz43', JSON.stringify(Array.from(remindedKeys)));
       }

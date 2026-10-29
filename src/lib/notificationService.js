@@ -1,5 +1,5 @@
 // ==========================================================================
-// СЕРВИС УВЕДОМЛЕНИЙ КГУ «СШ № 43» (WEB PUSH, PWA И СЕРВИС-ВОРКЕР)
+// СЕРВИС УВЕДОМЛЕНИЙ КГУ «СШ № 43» (W3C WEB PUSH, PWA И СЕРВИС-ВОРКЕР)
 // ==========================================================================
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
@@ -47,7 +47,7 @@ export const NotificationService = {
   },
 
   /**
-   * Проверка текущего статуса
+   * Проверка текущего статуса разрешения
    */
   getPermissionStatus() {
     if (!('Notification' in window)) return 'unsupported';
@@ -55,11 +55,19 @@ export const NotificationService = {
   },
 
   /**
-   * Регистрация браузера в W3C PushManager (FCM / APNs)
-   * Позволяет получать уведомления при закрытом браузере и выключенном экране
+   * Проверка поддержки W3C Web Push в текущем браузере
    */
-  async subscribePush(currentUserUuid) {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+  isPushSupported() {
+    return ('serviceWorker' in navigator) && ('PushManager' in window);
+  },
+
+  /**
+   * Регистрация браузера/смартфона в W3C PushManager (FCM / APNs)
+   * Позволяет доставлять системные уведомления при выключенном экране и закрытом приложении
+   */
+  async subscribePush(userOrId, optionalLogin = null) {
+    if (!this.isPushSupported()) {
+      console.warn('[Push] ServiceWorker или PushManager не поддерживаются в этом браузере.');
       return null;
     }
 
@@ -77,37 +85,52 @@ export const NotificationService = {
         });
       }
 
-      if (subscription && currentUserUuid) {
-        const subJson = subscription.toJSON();
+      // Извлекаем userId и userLogin из объекта или аргументов
+      let userId = null;
+      let userLogin = optionalLogin;
 
-        // 1. Сохраняем в Supabase push_subscriptions
+      if (typeof userOrId === 'object' && userOrId !== null) {
+        userId = userOrId.id || userOrId.login;
+        userLogin = userOrId.login || optionalLogin;
+      } else {
+        userId = userOrId;
+      }
+
+      if (subscription && userId) {
+        const subJson = subscription.toJSON();
+        const idValue = String(userId);
+        const loginValue = userLogin ? String(userLogin).toLowerCase() : null;
+
+        // 1. Сохраняем подписку через Vercel Serverless Function /api/push
+        try {
+          await fetch('/api/push', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'subscribe',
+              userId: idValue,
+              userLogin: loginValue,
+              subscription: subJson
+            })
+          });
+        } catch (fetchErr) {
+          console.warn('[Push] /api/push subscribe notice:', fetchErr.message);
+        }
+
+        // 2. Прямой upsert в Supabase push_subscriptions (при наличии подключения)
         if (isSupabaseConfigured() && supabase) {
           try {
             await supabase.from('push_subscriptions').upsert([{
-              user_id: currentUserUuid,
+              user_id: idValue,
+              user_login: loginValue,
               endpoint: subscription.endpoint,
               subscription: subJson,
               user_agent: navigator.userAgent,
               updated_at: new Date().toISOString()
             }], { onConflict: 'endpoint' });
           } catch (e) {
-            console.warn('Supabase push_subscriptions upsert notice:', e.message);
+            console.warn('[Push] Supabase push_subscriptions notice:', e.message);
           }
-        }
-
-        // 2. Регистрируем через серверную функцию
-        try {
-          fetch('/api/push', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'subscribe',
-              userId: currentUserUuid,
-              subscription: subJson
-            })
-          }).catch(() => {});
-        } catch {
-          // ignore
         }
       }
 
@@ -119,27 +142,58 @@ export const NotificationService = {
   },
 
   /**
-   * Локальная отправка системного уведомления (когда PWA в активном процессе)
+   * Отправка настоящего серверного Web Push на текущее устройство
+   * Позволяет проверить приход уведомления при выключенном экране телефона
+   */
+  async sendTestWebPush(currentUser, delaySeconds = 0) {
+    if (!currentUser) return { success: false, error: 'Пользователь не авторизован' };
+
+    const targetUserId = currentUser.id || currentUser.login;
+
+    if (delaySeconds > 0) {
+      // Задержка: даем пользователю время заблокировать экран телефона
+      await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
+    }
+
+    try {
+      const response = await fetch('/api/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetUserId,
+          title: '🔔 Тест Web Push: КГУ «СШ № 43»',
+          message: 'Web Push доставлен! Работает даже при заблокированном экране и закрытом браузере.',
+          type: 'test',
+          tag: `school43-test-${Date.now()}`
+        })
+      });
+      const data = await response.json();
+      return { success: true, ...data };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  /**
+   * Локальное системное уведомление (резервный fallback только для автономного режима без интернета)
    */
   async send(title, options = {}) {
     if (!('Notification' in window) || Notification.permission !== 'granted') {
       return null;
     }
 
-    // Явно извлекаем taskId — не полагаемся на spread
     const taskId = options.taskId || null;
     const body = options.body || '';
     const targetUrl = taskId ? `/?openTaskId=${taskId}&tab=tasks` : '/';
+    const tag = options.tag || (taskId ? `school43-local-${taskId}` : `school43-local-${Date.now()}`);
 
-    // Формируем payload строго — data НЕ перезатирается, tag уникален для каждого события
     const notifOptions = {
       body,
       icon: '/school43logo.png',
       badge: '/badge-96x96.png',
-      image: '/school43logo.png',
       vibrate: [250, 100, 250],
-      tag: options.tag || `school43-${taskId || 'notif'}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      renotify: true,
+      tag,
+      renotify: false,
       requireInteraction: false,
       data: {
         url: targetUrl,
@@ -148,7 +202,6 @@ export const NotificationService = {
       }
     };
 
-    // 1. Через Service Worker (для Android/Desktop PWA — работает при свернутом приложении)
     if ('serviceWorker' in navigator) {
       try {
         const registration = await navigator.serviceWorker.ready;
@@ -157,11 +210,10 @@ export const NotificationService = {
           return true;
         }
       } catch (swErr) {
-        console.warn('SW showNotification failed, fallback to Notification constructor:', swErr?.message);
+        console.warn('SW showNotification fallback:', swErr?.message);
       }
     }
 
-    // 2. Fallback: стандартный конструктор Notification (Desktop Chrome/Firefox)
     try {
       const notif = new Notification(title, notifOptions);
       notif.onclick = function(e) {
