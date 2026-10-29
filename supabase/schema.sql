@@ -162,6 +162,24 @@ INSERT INTO public.profiles (
   password_hash = EXCLUDED.password_hash;
 
 -- ==========================================================================
+-- 6. ТАБЛИЦА WEB PUSH ПОДПИСОК (ДЛЯ ФОНОВЫХ PUSH ПРИ ВЫКЛЮЧЕННОМ ЭКРАНЕ/ЗАКРЫТОМ БРАУЗЕРЕ)
+-- ==========================================================================
+CREATE TABLE IF NOT EXISTS public.push_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL UNIQUE,
+  subscription JSONB NOT NULL,
+  user_agent TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_subs_user ON public.push_subscriptions(user_id);
+ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Доступ к push подпискам" ON public.push_subscriptions;
+CREATE POLICY "Доступ к push подпискам" ON public.push_subscriptions FOR ALL USING (true) WITH CHECK (true);
+
+-- ==========================================================================
 -- ВКЛЮЧЕНИЕ SUPABASE REALTIME (ДЛЯ ЖИВОГО ОБНОВЛЕНИЯ БЕЗ НАЖАТИЯ F5)
 -- ==========================================================================
 DO $$

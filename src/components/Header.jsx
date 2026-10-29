@@ -57,6 +57,9 @@ export default function Header() {
     setPushStatus(updatedStatus);
 
     if (granted) {
+      if (currentUser?.id) {
+        NotificationService.subscribePush(currentUser.id);
+      }
       showToast(schoolInfo.shortName, 'Хабарламалар қосылды! / Уведомления успешно включены!');
       NotificationService.send(schoolInfo.shortName, {
         body: 'Уведомления включены! Вы будете вовремя узнавать о поручениях директора и сроках сдачи СОР/СОЧ.'

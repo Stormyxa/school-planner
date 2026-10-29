@@ -731,10 +731,39 @@ export function AuthProvider({ children }) {
           if (error) console.warn('[dispatchNotification] Batch insert error:', error.message);
         }
       }
+
+      // 3. Отправляем настоящий W3C Web Push (FCM / APNs) для доставки на выключенные экраны и закрытые браузеры
+      try {
+        const targetUuid = resolvedTargetUuid || (isUuid(targetUserId) ? targetUserId : null);
+        fetch('/api/push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            targetUserId: targetUuid,
+            targetRole,
+            title,
+            message,
+            taskId,
+            type
+          })
+        }).catch(() => {});
+      } catch {
+        // ignore
+      }
     } catch (err) {
       console.warn('[dispatchNotification] Supabase error:', err.message);
     }
   };
+
+  // Автоматическая подписка на W3C PushManager (Web Push) для получения уведомлений при закрытом браузере/экране
+  useEffect(() => {
+    if (currentUser) {
+      const userUuid = resolveProfileUuid(currentUser.id || currentUser.login);
+      if (userUuid && 'Notification' in window && Notification.permission === 'granted') {
+        NotificationService.subscribePush(userUuid);
+      }
+    }
+  }, [currentUser, resolveProfileUuid]);
 
   // Автоматический мониторинг дедлайнов и планёрок на сегодня/завтра
   useEffect(() => {
