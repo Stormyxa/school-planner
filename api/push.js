@@ -62,7 +62,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
   // GET: либо публичный VAPID-ключ для браузера, либо запуск проверки дедлайнов, либо диагностика
   if (req.method === 'GET') {
@@ -70,7 +70,8 @@ export default async function handler(req, res) {
     if (action === 'check-deadlines') {
       return handleCheckDeadlines(res);
     }
-    if (action === 'debug' && supabase) {
+    if (action === 'debug') {
+      if (!supabase) return res.status(200).json({ error: 'Supabase client not initialized: check VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY / VITE_SUPABASE_ANON_KEY', supabaseUrl: Boolean(supabaseUrl), supabaseKey: Boolean(supabaseKey) });
       const { data: subs, error: subErr } = await supabase.from('push_subscriptions').select('id, user_id, updated_at');
       const { data: profiles, error: profErr } = await supabase.from('profiles').select('id, login, full_name, role');
       const { data: notifs, error: notifErr } = await supabase.from('notifications').select('id, user_id, title, created_at').order('created_at', { ascending: false }).limit(5);
@@ -85,8 +86,6 @@ export default async function handler(req, res) {
 
   const body = req.body || {};
   const action = body.action || req.query?.action;
-
-  const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
   // ── 1. РЕГИСТРАЦИЯ PUSH-ПОДПИСКИ УСТРОЙСТВА ─────────────────────────────
   if (action === 'subscribe') {
