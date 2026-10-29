@@ -1,23 +1,26 @@
 // ==========================================================================
-// КОНТЕКСТ АВТОРИЗАЦИИ И СОСТОЯНИЯ ШКОЛЫ
+// КОНТЕКСТ АВТОРИЗАЦИИ И ЖИВОЙ СИНХРОНИЗАЦИИ КГУ «СШ № 43»
 // ==========================================================================
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { INITIAL_STAFF, INITIAL_TASKS, INITIAL_MEETINGS, INITIAL_NOTIFICATIONS } from '../lib/mockData';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { INITIAL_STAFF, INITIAL_TASKS, INITIAL_MEETINGS, INITIAL_NOTIFICATIONS, SCHOOL_INFO } from '../lib/mockData';
 import { NotificationService } from '../lib/notificationService';
+import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import confetti from 'canvas-confetti';
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
-  // 1. Сотрудники
+  const [schoolInfo] = useState(SCHOOL_INFO);
+
+  // 1. Сотрудники КГУ «СШ № 43»
   const [staff, setStaff] = useState(() => {
-    const saved = localStorage.getItem('sp_staff');
+    const saved = localStorage.getItem('sp_staff_kz43');
     return saved ? JSON.parse(saved) : INITIAL_STAFF;
   });
 
-  // 2. Текущий пользователь (по умолчанию Директор школы)
+  // 2. Текущий пользователь (по умолчанию Директор Омарова Г.Б.)
   const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem('sp_current_user');
+    const saved = localStorage.getItem('sp_current_user_kz43');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -25,51 +28,53 @@ export function AuthProvider({ children }) {
         // fallback
       }
     }
-    return INITIAL_STAFF[0]; // Елена Николаевна (Директор)
+    return INITIAL_STAFF[0];
   });
 
   // 3. Задачи и поручения
   const [tasks, setTasks] = useState(() => {
-    const saved = localStorage.getItem('sp_tasks');
+    const saved = localStorage.getItem('sp_tasks_kz43');
     return saved ? JSON.parse(saved) : INITIAL_TASKS;
   });
 
   // 4. Планёрки и педсоветы
   const [meetings, setMeetings] = useState(() => {
-    const saved = localStorage.getItem('sp_meetings');
+    const saved = localStorage.getItem('sp_meetings_kz43');
     return saved ? JSON.parse(saved) : INITIAL_MEETINGS;
   });
 
   // 5. Уведомления
   const [notifications, setNotifications] = useState(() => {
-    const saved = localStorage.getItem('sp_notifications');
+    const saved = localStorage.getItem('sp_notifications_kz43');
     return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
   });
 
-  // 6. Тема оформления (светлая / тёмная)
+  // 6. Тема
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('sp_theme') || 'light';
   });
 
-  // Сохранение в LocalStorage
+  const [isCloudSyncing, setIsCloudSyncing] = useState(false);
+
+  // Локальное кэширование
   useEffect(() => {
-    localStorage.setItem('sp_staff', JSON.stringify(staff));
+    localStorage.setItem('sp_staff_kz43', JSON.stringify(staff));
   }, [staff]);
 
   useEffect(() => {
-    localStorage.setItem('sp_current_user', JSON.stringify(currentUser));
+    localStorage.setItem('sp_current_user_kz43', JSON.stringify(currentUser));
   }, [currentUser]);
 
   useEffect(() => {
-    localStorage.setItem('sp_tasks', JSON.stringify(tasks));
+    localStorage.setItem('sp_tasks_kz43', JSON.stringify(tasks));
   }, [tasks]);
 
   useEffect(() => {
-    localStorage.setItem('sp_meetings', JSON.stringify(meetings));
+    localStorage.setItem('sp_meetings_kz43', JSON.stringify(meetings));
   }, [meetings]);
 
   useEffect(() => {
-    localStorage.setItem('sp_notifications', JSON.stringify(notifications));
+    localStorage.setItem('sp_notifications_kz43', JSON.stringify(notifications));
   }, [notifications]);
 
   useEffect(() => {
@@ -77,31 +82,104 @@ export function AuthProvider({ children }) {
     localStorage.setItem('sp_theme', theme);
   }, [theme]);
 
+  // Загрузка и живая подписка на Supabase (если ключи настроены)
+  useEffect(() => {
+    if (!isSupabaseConfigured() || !supabase) return;
+
+    let isMounted = true;
+    setIsCloudSyncing(true);
+
+    const loadFromSupabase = async () => {
+      try {
+        // Загрузка поручений
+        const { data: supaTasks, error: taskErr } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
+        if (!taskErr && supaTasks && supaTasks.length > 0 && isMounted) {
+          // Нормализация полей
+          const mapped = supaTasks.map(t => ({
+            id: t.id,
+            title: t.title,
+            description: t.description,
+            assignedToId: t.assigned_to_id,
+            assignedToName: t.assigned_to_name,
+            createdById: t.created_by_id,
+            createdByName: t.created_by_name,
+            priority: t.priority,
+            deadline: t.deadline,
+            status: t.status,
+            requiresFile: t.requires_file,
+            category: t.category,
+            teacherComment: t.teacher_comment,
+            reviewComment: t.review_comment,
+            submittedFile: t.submitted_file ? JSON.parse(t.submitted_file) : null
+          }));
+          setTasks(mapped);
+        }
+
+        // Загрузка планёрок
+        const { data: supaMeetings, error: meetErr } = await supabase.from('meetings').select('*').order('meeting_date', { ascending: true });
+        if (!meetErr && supaMeetings && supaMeetings.length > 0 && isMounted) {
+          const mappedM = supaMeetings.map(m => ({
+            id: m.id,
+            title: m.title,
+            type: m.type,
+            typeLabel: m.type_label,
+            date: m.meeting_date,
+            time: m.meeting_time,
+            location: m.location,
+            leader: m.leader,
+            agenda: Array.isArray(m.agenda) ? m.agenda : [],
+            status: m.status
+          }));
+          setMeetings(mappedM);
+        }
+      } catch (err) {
+        console.warn('Supabase fetch notice:', err.message);
+      } finally {
+        if (isMounted) setIsCloudSyncing(false);
+      }
+    };
+
+    loadFromSupabase();
+
+    // Подписка на Realtime изменения в Supabase
+    const channel = supabase
+      .channel('school_planner_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
+        loadFromSupabase();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' }, () => {
+        loadFromSupabase();
+      })
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const toggleTheme = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
 
-  // Ролевые геттеры
   const isDirector = currentUser?.role === 'director';
   const isHeadTeacher = currentUser?.role === 'head_teacher';
   const isTeacher = currentUser?.role === 'teacher';
 
-  // Переключение пользователя (для демонстрации и удобства)
   const switchUser = (userId) => {
     const target = staff.find(s => s.id === userId);
     if (target) {
       setCurrentUser(target);
-      NotificationService.send('Смена пользователя', {
+      NotificationService.send('КГУ «СШ № 43»', {
         body: `Вы вошли как: ${target.name} (${target.roleTitle})`
       });
     }
   };
 
-  // Вход по логину и паролю
   const loginWithCredentials = (login, password) => {
     const user = staff.find(s => s.login.toLowerCase() === login.trim().toLowerCase());
     if (user) {
-      if (user.passHint === password || password === 'admin' || password === 'school2026') {
+      if (user.passHint === password || password === 'admin' || password === 'school43kz') {
         setCurrentUser(user);
         return { success: true };
       }
@@ -110,8 +188,8 @@ export function AuthProvider({ children }) {
     return { success: false, error: 'Пользователь с таким логином не найден.' };
   };
 
-  // Добавление новой задачи (Директором или Завучем)
-  const addTask = (taskData) => {
+  // Добавление задачи с сохранением в Supabase + Local
+  const addTask = async (taskData) => {
     const newTask = {
       id: `task-${Date.now()}`,
       createdById: currentUser.id,
@@ -123,10 +201,28 @@ export function AuthProvider({ children }) {
 
     setTasks(prev => [newTask, ...prev]);
 
-    // Добавляем уведомление исполнителю
+    // Отправка в Supabase если настроен
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from('tasks').insert([{
+          title: newTask.title,
+          description: newTask.description,
+          assigned_to_name: newTask.assignedToName,
+          created_by_name: newTask.createdByName,
+          priority: newTask.priority,
+          deadline: newTask.deadline,
+          status: 'todo',
+          requires_file: newTask.requiresFile,
+          category: newTask.category
+        }]);
+      } catch (err) {
+        console.warn('Не удалось записать задачу в Supabase:', err.message);
+      }
+    }
+
     const newNotif = {
       id: `notif-${Date.now()}`,
-      title: 'Новое поручение',
+      title: 'Новое поручение КГУ «СШ № 43»',
       message: `${currentUser.name} назначил(а) задачу: «${newTask.title}»`,
       time: 'Только что',
       read: false,
@@ -135,14 +231,14 @@ export function AuthProvider({ children }) {
     setNotifications(prev => [newNotif, ...prev]);
 
     NotificationService.send('Новое поручение', {
-      body: `Назначена задача: «${newTask.title}»`
+      body: `КГУ СШ № 43: «${newTask.title}»`
     });
 
     return newTask;
   };
 
-  // Обновление статуса задачи
-  const updateTaskStatus = (taskId, newStatus, extraData = {}) => {
+  // Обновление статуса задачи (включая Supabase)
+  const updateTaskStatus = async (taskId, newStatus, extraData = {}) => {
     setTasks(prev => prev.map(t => {
       if (t.id === taskId) {
         const updated = { ...t, status: newStatus, ...extraData };
@@ -161,10 +257,22 @@ export function AuthProvider({ children }) {
       }
       return t;
     }));
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from('tasks').update({
+          status: newStatus,
+          review_comment: extraData.reviewComment || null,
+          reviewed_at: extraData.reviewedAt || null
+        }).eq('id', taskId);
+      } catch {
+        // fallback to local
+      }
+    }
   };
 
-  // Сдача отчета учителем (с файлом или без)
-  const submitTaskReport = (taskId, fileInfo, comment = '') => {
+  // Сдача отчета учителем
+  const submitTaskReport = async (taskId, fileInfo, comment = '') => {
     setTasks(prev => prev.map(t => {
       if (t.id === taskId) {
         return {
@@ -178,7 +286,28 @@ export function AuthProvider({ children }) {
       return t;
     }));
 
-    // Уведомление директору
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from('tasks').update({
+          status: 'submitted',
+          teacher_comment: comment,
+          submitted_at: new Date().toISOString()
+        }).eq('id', taskId);
+
+        if (fileInfo) {
+          await supabase.from('task_files').insert([{
+            task_id: taskId,
+            file_name: fileInfo.name,
+            file_size: fileInfo.size,
+            download_url: fileInfo.url,
+            storage_type: fileInfo.storageType || 'github'
+          }]);
+        }
+      } catch {
+        // fallback to local
+      }
+    }
+
     const newNotif = {
       id: `notif-${Date.now()}`,
       title: 'Отчет сдан на проверку',
@@ -194,8 +323,8 @@ export function AuthProvider({ children }) {
     });
   };
 
-  // Добавление новой планёрки / совещания
-  const addMeeting = (meetingData) => {
+  // Добавление новой планёрки
+  const addMeeting = async (meetingData) => {
     const newMeeting = {
       id: `meet-${Date.now()}`,
       leader: `${currentUser.name} (${currentUser.roleTitle})`,
@@ -204,9 +333,27 @@ export function AuthProvider({ children }) {
     };
     setMeetings(prev => [newMeeting, ...prev]);
 
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from('meetings').insert([{
+          title: newMeeting.title,
+          type: newMeeting.type,
+          type_label: newMeeting.typeLabel,
+          meeting_date: newMeeting.date,
+          meeting_time: newMeeting.time,
+          location: newMeeting.location,
+          leader: newMeeting.leader,
+          agenda: newMeeting.agenda,
+          status: 'scheduled'
+        }]);
+      } catch {
+        // fallback
+      }
+    }
+
     const notif = {
       id: `notif-${Date.now()}`,
-      title: 'Новая планёрка / совещание',
+      title: 'Планёрка КГУ «СШ № 43»',
       message: `Назначена встреча: ${newMeeting.title} (${newMeeting.date})`,
       time: 'Только что',
       read: false,
@@ -214,14 +361,13 @@ export function AuthProvider({ children }) {
     };
     setNotifications(prev => [notif, ...prev]);
 
-    NotificationService.send('Назначена планёрка', {
+    NotificationService.send('Планёрка КГУ СШ № 43', {
       body: `${newMeeting.title} — ${newMeeting.date} в ${newMeeting.time}`
     });
 
     return newMeeting;
   };
 
-  // Добавление сотрудника директором
   const addStaffMember = (memberData) => {
     const newMember = {
       id: `user-${Date.now()}`,
@@ -232,13 +378,13 @@ export function AuthProvider({ children }) {
     return newMember;
   };
 
-  // Отметить уведомления прочитанными
   const markAllNotificationsRead = () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   };
 
   return (
     <AuthContext.Provider value={{
+      schoolInfo,
       currentUser,
       setCurrentUser,
       staff,
@@ -251,6 +397,7 @@ export function AuthProvider({ children }) {
       isDirector,
       isHeadTeacher,
       isTeacher,
+      isCloudSyncing,
       switchUser,
       loginWithCredentials,
       addTask,

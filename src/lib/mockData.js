@@ -1,177 +1,219 @@
 // ==========================================================================
-// ШКОЛЬНЫЕ НАЧАЛЬНЫЕ ДАННЫЕ (ДЕМО И РЕЗЕРВНЫЙ РЕЖИМ)
+// ШКОЛЬНЫЕ ДАННЫЕ ДЛЯ КГУ «СШ № 43» (КАЗАХСТАН)
 // ==========================================================================
+
+export const SCHOOL_INFO = {
+  name: 'КГУ «Средняя общеобразовательная школа № 43»',
+  shortName: 'КГУ «СШ № 43»',
+  kazName: '«№ 43 орта жалпы білім беретін мектеп» КММ',
+  academicYear: '2026/2027 оқу жылы • 1 тоқсан (четверть)',
+  systemJournal: 'Күнделік (Kundelik.kz)'
+};
 
 export const INITIAL_STAFF = [
   {
     id: 'user-director-1',
-    name: 'Иванова Елена Николаевна',
-    role: 'director', // 'director' | 'head_teacher' | 'teacher'
-    roleTitle: 'Директор школы',
-    subject: 'Управление школой',
-    email: 'director@school.edu',
-    phone: '+7 (912) 345-67-01',
-    login: 'director',
-    passHint: 'school2026',
-    avatar: 'ЕН'
+    name: 'Омарова Гульнара Бауржановна',
+    role: 'director',
+    roleTitle: 'Директор школы / Мектеп басшысы',
+    subject: 'Менеджмент в образовании',
+    email: 'director.sch43@edu.kz',
+    phone: '+7 (777) 123-45-01',
+    login: 'director43',
+    passHint: 'school43kz',
+    avatar: 'ГО',
+    category: 'Педагог-шебер (Педагог-мастер)'
   },
   {
     id: 'user-head-1',
-    name: 'Смирнова Ольга Владимировна',
+    name: 'Садыкова Айнур Касымовна',
     role: 'head_teacher',
-    roleTitle: 'Зам. директора по УВР',
-    subject: 'Учебно-воспитательная работа',
-    email: 'uvr@school.edu',
-    phone: '+7 (912) 345-67-02',
-    login: 'uvr_smirnova',
-    passHint: 'uvr1234',
-    avatar: 'ОВ'
+    roleTitle: 'Зам. директора по УВР (Оқу ісінің меңгерушісі)',
+    subject: 'Учебно-воспитательная работа, СОР/СОЧ',
+    email: 'uvr.sch43@edu.kz',
+    phone: '+7 (777) 123-45-02',
+    login: 'uvr_sadykova',
+    passHint: 'uvr43',
+    avatar: 'АС',
+    category: 'Педагог-зерттеуші'
   },
   {
     id: 'user-head-2',
-    name: 'Ковалев Андрей Дмитриевич',
+    name: 'Жумабеков Данияр Ерланович',
     role: 'head_teacher',
-    roleTitle: 'Зам. директора по ВР',
-    subject: 'Воспитательная работа и безопасность',
-    email: 'vr@school.edu',
-    phone: '+7 (912) 345-67-03',
-    login: 'vr_kovalev',
-    passHint: 'vr1234',
-    avatar: 'АК'
+    roleTitle: 'Зам. директора по ВР (Тәрбие ісінің меңгерушісі)',
+    subject: '«Біртұтас тәрбие» және қауіпсіздік',
+    email: 'vr.sch43@edu.kz',
+    phone: '+7 (777) 123-45-03',
+    login: 'vr_zhumabekov',
+    passHint: 'vr43',
+    avatar: 'ДЖ',
+    category: 'Педагог-сарапшы'
+  },
+  {
+    id: 'user-head-3',
+    name: 'Каримов Руслан Серикович',
+    role: 'head_teacher',
+    roleTitle: 'Зам. директора по цифровизации (Kundelik / ИТ)',
+    subject: 'Информатизация и Kundelik.kz',
+    email: 'it.sch43@edu.kz',
+    phone: '+7 (777) 123-45-04',
+    login: 'it_karimov',
+    passHint: 'it43',
+    avatar: 'РК',
+    category: 'Педагог-модератор'
   },
   {
     id: 'user-teacher-1',
-    name: 'Петров Алексей Сергеевич',
+    name: 'Абдрахманова Майра Серикбаевна',
     role: 'teacher',
-    roleTitle: 'Учитель математики',
-    subject: 'Алгебра, Геометрия',
-    classLeader: '9 «А» класс',
-    email: 'petrov.math@school.edu',
-    phone: '+7 (912) 345-67-11',
-    login: 'petrov_as',
-    passHint: 'math9a',
-    avatar: 'АП'
+    roleTitle: 'Қазақ тілі мен әдебиеті мұғалімі',
+    subject: 'Қазақ тілі, Қазақ әдебиеті',
+    classLeader: '7 «А» сыныбы',
+    email: 'abdrakhmanova@sch43.kz',
+    phone: '+7 (778) 234-56-11',
+    login: 'abdrakhmanova_m',
+    passHint: 'kaz7a',
+    avatar: 'МА',
+    category: 'Педагог-зерттеуші'
   },
   {
     id: 'user-teacher-2',
-    name: 'Кузнецова Анна Михайловна',
+    name: 'Петров Алексей Сергеевич',
     role: 'teacher',
-    roleTitle: 'Учитель русского языка и лит-ры',
-    subject: 'Русский язык, Литература',
-    classLeader: '11 «Б» класс',
-    email: 'kuznetsova.rus@school.edu',
-    phone: '+7 (912) 345-67-12',
-    login: 'kuznetsova_am',
-    passHint: 'rus11b',
-    avatar: 'АК'
+    roleTitle: 'Учитель математики и информатики',
+    subject: 'Алгебра, Геометрия',
+    classLeader: '9 «Б» класс',
+    email: 'petrov.math@sch43.kz',
+    phone: '+7 (775) 345-67-12',
+    login: 'petrov_as',
+    passHint: 'math9b',
+    avatar: 'АП',
+    category: 'Педагог-сарапшы'
   },
   {
     id: 'user-teacher-3',
-    name: 'Морозов Сергей Павлович',
+    name: 'Смирнова Ольга Владимировна',
     role: 'teacher',
-    roleTitle: 'Учитель физики и информатики',
-    subject: 'Физика, Информатика',
+    roleTitle: 'Учитель русского языка и литературы',
+    subject: 'Русский язык, Литература',
     classLeader: '10 «А» класс',
-    email: 'morozov.physics@school.edu',
-    phone: '+7 (912) 345-67-13',
-    login: 'morozov_sp',
-    passHint: 'phys10',
-    avatar: 'СМ'
+    email: 'smirnova.rus@sch43.kz',
+    phone: '+7 (771) 456-78-13',
+    login: 'smirnova_ov',
+    passHint: 'rus10a',
+    avatar: 'ОС',
+    category: 'Педагог-сарапшы'
   },
   {
     id: 'user-teacher-4',
-    name: 'Белова Татьяна Ивановна',
+    name: 'Бауыржанұлы Нұрсұлтан',
     role: 'teacher',
-    roleTitle: 'Учитель начальных классов',
-    subject: 'Начальная школа',
+    roleTitle: 'Физика және робототехника пәні мұғалімі',
+    subject: 'Физика, Информатика, Робототехника',
+    classLeader: '8 «Ә» сыныбы',
+    email: 'bauyrzhanuly@sch43.kz',
+    phone: '+7 (702) 567-89-14',
+    login: 'bauyrzhanuly_n',
+    passHint: 'phys8ae',
+    avatar: 'НБ',
+    category: 'Педагог-модератор'
+  },
+  {
+    id: 'user-teacher-5',
+    name: 'Исаева Динара Муратовна',
+    role: 'teacher',
+    roleTitle: 'Бастауыш сынып мұғалімі',
+    subject: 'Начальные классы / Бастауыш сыныптар',
     classLeader: '3 «В» класс',
-    email: 'belova.primary@school.edu',
-    phone: '+7 (912) 345-67-14',
-    login: 'belova_ti',
+    email: 'isaeva.primary@sch43.kz',
+    phone: '+7 (708) 678-90-15',
+    login: 'isaeva_dm',
     passHint: 'prim3v',
-    avatar: 'ТБ'
+    avatar: 'ДИ',
+    category: 'Педагог-модератор'
   }
 ];
 
 export const INITIAL_TASKS = [
   {
     id: 'task-101',
-    title: 'Сдать сводный отчет по успеваемости за 1 четверть',
-    description: 'Заполнить стандартную форму успеваемости по классам: количество отличников, хорошистов, качество знаний и СОУ. Прикрепить файл Excel по утвержденной форме УВР.',
-    assignedToId: 'user-teacher-1',
-    assignedToName: 'Петров Алексей Сергеевич',
+    title: 'Сдать графики проведения СОР и СОЧ (БЖБ/ТЖБ) за 1 четверть',
+    description: 'Утвердить единый график проведения суммативного оценивания по параллелям, чтобы исключить проведение более трех СОР/СОЧ в один учебный день. Прикрепить файл утвержденного графика.',
+    assignedToId: 'user-head-1',
+    assignedToName: 'Садыкова Айнур Касымовна (Завуч УВР)',
     createdById: 'user-director-1',
-    createdByName: 'Иванова Е.Н. (Директор)',
-    priority: 'urgent', // 'normal' | 'high' | 'urgent'
-    deadline: new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString().split('T')[0], // через 2 дня
-    status: 'in_progress', // 'todo' | 'in_progress' | 'submitted' | 'completed' | 'revision'
+    createdByName: 'Омарова Г.Б. (Директор КГУ «СШ № 43»)',
+    priority: 'urgent',
+    deadline: new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString().split('T')[0],
+    status: 'in_progress',
     requiresFile: true,
-    category: 'Отчетность',
+    category: 'СОР и СОЧ',
     submittedFile: null
   },
   {
     id: 'task-102',
-    title: 'Предоставить скорректированные рабочие программы по ФГОС-3',
-    description: 'Внести изменения в календарно-тематическое планирование с учетом обновленных требований Минпросвещения.',
-    assignedToId: 'user-teacher-2',
-    assignedToName: 'Кузнецова Анна Михайловна',
-    createdById: 'user-head-1',
-    createdByName: 'Смирнова О.В. (Завуч УВР)',
+    title: 'Мониторинг своевременности ведения электронного журнала Kundelik.kz',
+    description: 'Проверить выставление формативного оценивания (баллы 1-10) учителями за прошедшую неделю, заполнение тем уроков и домашних заданий в системе Күнделік.',
+    assignedToId: 'user-head-3',
+    assignedToName: 'Каримов Руслан Серикович (Завуч по ИТ)',
+    createdById: 'user-director-1',
+    createdByName: 'Омарова Г.Б. (Директор)',
     priority: 'high',
-    deadline: new Date(Date.now() + 5 * 24 * 3600 * 1000).toISOString().split('T')[0],
+    deadline: new Date(Date.now() + 1 * 24 * 3600 * 1000).toISOString().split('T')[0],
     status: 'submitted',
     requiresFile: true,
-    category: 'Учебные программы',
+    category: 'Kundelik.kz',
     submittedFile: {
-      name: 'РП_Русский_Язык_11кл_Кузнецова.docx',
-      size: '2.4 МБ',
-      date: 'Сегодня, 10:15',
-      url: 'https://raw.githubusercontent.com/Stormyxa/school-archive-demo/main/docs/RP_11kl.docx'
+      name: 'Справка_мониторинг_Kundelik_октябрь_2026.xlsx',
+      size: '1.8 МБ',
+      date: 'Сегодня, 11:20',
+      url: 'https://raw.githubusercontent.com/Stormyxa/school-archive/main/documents/kundelik_report.xlsx'
     }
   },
   {
     id: 'task-103',
-    title: 'Провести классные часы по антитеррористической защищенности',
-    description: 'Провести инструктаж во всех закрепленных классах. Сделать отметку в журнале и сдать лист ознакомления с подписями учащихся старше 14 лет.',
-    assignedToId: 'user-teacher-3',
-    assignedToName: 'Морозов Сергей Павлович',
+    title: 'Предоставить план воспитательных мероприятий по концепции «Біртұтас тәрбие»',
+    description: 'Оформить календарный план классных часов и родительских собраний по ценностям: Тәуелсіздік және отаншылдық, Ар-ұят, Әділдік және жауапкершілік.',
+    assignedToId: 'user-teacher-1',
+    assignedToName: 'Абдрахманова Майра Серикбаевна',
     createdById: 'user-head-2',
-    createdByName: 'Ковалев А.Д. (Завуч ВР)',
-    priority: 'high',
-    deadline: new Date(Date.now() + 1 * 24 * 3600 * 1000).toISOString().split('T')[0],
-    status: 'completed',
-    requiresFile: false,
-    category: 'Безопасность',
+    createdByName: 'Жумабеков Д.Е. (Завуч ВР)',
+    priority: 'normal',
+    deadline: new Date(Date.now() + 4 * 24 * 3600 * 1000).toISOString().split('T')[0],
+    status: 'in_progress',
+    requiresFile: true,
+    category: 'Біртұтас тәрбие',
     submittedFile: null
   },
   {
     id: 'task-104',
-    title: 'Сформировать списки на школьный этап Всероссийской олимпиады (ВсОШ)',
-    description: 'Собрать согласия родителей и внести участников в электронную систему тестирования.',
-    assignedToId: 'user-teacher-1',
+    title: 'Сформировать заявки на школьный этап Республиканской олимпиады по предметам',
+    description: 'Собрать списки победителей и призеров 8-11 классов по математике, физике, казахскому и русскому языкам для регистрации в районном отделе образования.',
+    assignedToId: 'user-teacher-2',
     assignedToName: 'Петров Алексей Сергеевич',
     createdById: 'user-director-1',
-    createdByName: 'Иванова Е.Н. (Директор)',
+    createdByName: 'Омарова Г.Б. (Директор)',
     priority: 'urgent',
-    deadline: new Date(Date.now() - 1 * 24 * 3600 * 1000).toISOString().split('T')[0], // вчера (демо просрочки)
+    deadline: new Date(Date.now() - 1 * 24 * 3600 * 1000).toISOString().split('T')[0], // просрочено вчера
     status: 'todo',
     requiresFile: true,
-    category: 'Олимпиады',
+    category: 'Олимпиада',
     submittedFile: null
   },
   {
     id: 'task-105',
-    title: 'Подготовить аналитическую справку по входным контрольным работам',
-    description: 'Обобщить результаты входного контроля по математике и русскому языку в 5-х и 9-х классах. Выделить группу риска.',
-    assignedToId: 'user-head-1',
+    title: 'Подготовить анализ суммативного оценивания за раздел (СОР №1) по параллелям 5-9 кл.',
+    description: 'Заполнить аналитическую карту типичных затруднений учащихся по уровням мыслительных навыков (знание, понимание, применение, навыки высокого порядка).',
+    assignedToId: 'user-teacher-3',
     assignedToName: 'Смирнова Ольга Владимировна',
-    createdById: 'user-director-1',
-    createdByName: 'Иванова Е.Н. (Директор)',
+    createdById: 'user-head-1',
+    createdByName: 'Садыкова А.К. (Завуч УВР)',
     priority: 'high',
-    deadline: new Date(Date.now() + 4 * 24 * 3600 * 1000).toISOString().split('T')[0],
+    deadline: new Date(Date.now() + 5 * 24 * 3600 * 1000).toISOString().split('T')[0],
     status: 'in_progress',
     requiresFile: true,
-    category: 'Мониторинг',
+    category: 'СОР и СОЧ',
     submittedFile: null
   }
 ];
@@ -179,52 +221,52 @@ export const INITIAL_TASKS = [
 export const INITIAL_MEETINGS = [
   {
     id: 'meet-1',
-    title: 'Еженедельная планёрка администрации школы',
-    type: 'planerka', // 'planerka' | 'pedsovet' | 'soveshanie' | 'shkola'
+    title: 'Аппаратная планёрка администрации КГУ «СШ № 43»',
+    type: 'planerka',
     typeLabel: 'Планёрка администрации',
     date: new Date(Date.now() + 1 * 24 * 3600 * 1000).toISOString().split('T')[0],
     time: '08:30 – 09:15',
-    location: 'Кабинет директора (№ 201)',
-    leader: 'Иванова Е.Н. (Директор)',
-    participants: ['Смирнова О.В.', 'Ковалев А.Д.', 'Завхоз', 'Секретарь'],
+    location: 'Кабинет директора школы (№ 201)',
+    leader: 'Омарова Г.Б. (Директор)',
+    participants: ['Садыкова А.К.', 'Жумабеков Д.Е.', 'Каримов Р.С.', 'Секретарь'],
     agenda: [
-      'Готовность школы к отопительному сезону',
-      'График проведения ВПР и пробных ОГЭ/ЕГЭ',
-      'Исполнительская дисциплина по сдаче отчетов учителями'
+      'Результаты мониторинга своевременности Kundelik.kz',
+      'Утверждение графика проведения СОЧ за 1 четверть',
+      'Обеспечение безопасности и дежурство учителей по этажам'
     ],
     status: 'scheduled'
   },
   {
     id: 'meet-2',
-    title: 'Педагогический совет: «Преемственность начальной и основной школы»',
+    title: 'Педагогический совет: «Качество знаний и реализация концепции «Біртұтас тәрбие»',
     type: 'pedsovet',
     typeLabel: 'Педсовет',
     date: new Date(Date.now() + 6 * 24 * 3600 * 1000).toISOString().split('T')[0],
-    time: '15:00 – 16:30',
-    location: 'Актовый зал школы',
-    leader: 'Иванова Е.Н. (Директор)',
-    participants: ['Весь педагогический коллектив'],
+    time: '15:00 – 16:45',
+    location: 'Актовый зал КГУ «СШ № 43»',
+    leader: 'Омарова Г.Б. (Директор школы)',
+    participants: ['Весь педагогический коллектив школы'],
     agenda: [
-      'Доклад завуча УВР по адаптации 5-х классов',
-      'Выступление психолога: результаты входящего тестирования',
-      'Разное: согласование графика осенних каникул'
+      'Доклад директора: цели развития школы на 2026/2027 учебный год',
+      'Анализ итогов входных срезов знаний и подготовка к МОДО / ВОУД',
+      'Утверждение плана воспитательной работы «Біртұтас тәрбие»'
     ],
     status: 'scheduled'
   },
   {
     id: 'meet-3',
-    title: 'Оперативное совещание с классными руководителями 9-х и 11-х классов',
+    title: 'Совещание методического совета: подготовка к аттестации педагогов',
     type: 'soveshanie',
-    typeLabel: 'Совещание',
+    typeLabel: 'Методсовет',
     date: new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString().split('T')[0],
-    time: '14:20 – 15:00',
-    location: 'Методический кабинет (№ 105)',
-    leader: 'Смирнова О.В. (Завуч УВР)',
-    participants: ['Классные руководители выпускных классов', 'Соцпедагог'],
+    time: '14:30 – 15:30',
+    location: 'Методический кабинет (№ 104)',
+    leader: 'Садыкова А.К. (Завуч УВР)',
+    participants: ['Руководители методических объединений (ПЦК)'],
     agenda: [
-      'Предварительный выбор предметов для сдачи ОГЭ/ЕГЭ',
-      'Работа со слабоуспевающими учащимися',
-      'Информирование родителей о процедуре ГИА'
+      'Проверка портфолио аттестуемых педагогов (НКТ/ОЗП)',
+      'Обобщение передового педагогического опыта',
+      'Организация открытых уроков и мастер-классов'
     ],
     status: 'scheduled'
   }
@@ -233,25 +275,25 @@ export const INITIAL_MEETINGS = [
 export const INITIAL_NOTIFICATIONS = [
   {
     id: 'notif-1',
-    title: 'Новое поручение от директора',
-    message: 'Вам назначена задача: «Сдать сводный отчет по успеваемости за 1 четверть» до ' + new Date(Date.now() + 2 * 24 * 3600 * 1000).toLocaleDateString('ru-RU'),
-    time: '10 мин назад',
+    title: 'Поручение от директора КГУ «СШ № 43»',
+    message: 'Назначена задача: «Сдать графики проведения СОР и СОЧ за 1 четверть»',
+    time: '5 мин назад',
     read: false,
     type: 'task'
   },
   {
     id: 'notif-2',
     title: 'Напоминание о планёрке',
-    message: 'Завтра в 08:30 в кабинете директора состоится еженедельная планёрка.',
+    message: 'Завтра в 08:30 в кабинете директора состоится еженедельная аппаратная планёрка.',
     time: '1 час назад',
     read: false,
     type: 'meeting'
   },
   {
     id: 'notif-3',
-    title: 'Файл отчета проверен',
-    message: 'Завуч Смирнова О.В. приняла ваш отчет по рабочим программам.',
-    time: '3 часа назад',
+    title: 'Справка Kundelik.kz проверена',
+    message: 'Директор Омарова Г.Б. приняла аналитический отчет по электронному журналу.',
+    time: '2 часа назад',
     read: true,
     type: 'file'
   }

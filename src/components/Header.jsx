@@ -5,23 +5,25 @@ import {
   Bell, 
   Moon, 
   Sun, 
-  UserCheck, 
   ChevronDown, 
-  ShieldAlert, 
   CheckCircle2, 
   Smartphone,
-  School
+  School,
+  ExternalLink,
+  BookOpen
 } from 'lucide-react';
 
 export default function Header() {
   const { 
+    schoolInfo,
     currentUser, 
     staff, 
     switchUser, 
     theme, 
     toggleTheme, 
     notifications,
-    markAllNotificationsRead 
+    markAllNotificationsRead,
+    isCloudSyncing
   } = useAuth();
 
   const [showRoleMenu, setShowRoleMenu] = useState(false);
@@ -34,8 +36,8 @@ export default function Header() {
     const granted = await NotificationService.requestPermission();
     setPushStatus(NotificationService.getPermissionStatus());
     if (granted) {
-      NotificationService.send('Уведомления включены!', {
-        body: 'Теперь вы будете вовремя получать оповещения о дедлайнах и планёрках.'
+      NotificationService.send('КГУ «СШ № 43»', {
+        body: 'Уведомления включены! Вы будете вовремя узнавать о поручениях директора и сроках сдачи СОР/СОЧ.'
       });
     }
   };
@@ -57,13 +59,13 @@ export default function Header() {
         paddingTop: '0.75rem',
         paddingBottom: '0.75rem'
       }}>
-        {/* Логотип и Название Школы */}
+        {/* Логотип и Название Школы: КГУ «СШ № 43» */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
           <div style={{
             width: '42px',
             height: '42px',
             borderRadius: 'var(--radius-md)',
-            background: 'linear-gradient(135deg, var(--color-primary), var(--color-primary-light))',
+            background: 'linear-gradient(135deg, #0284c7 0%, #1e3a8a 100%)', // Небесно-голубой и индиго (Казахстанский мотив)
             color: '#fff',
             display: 'flex',
             alignItems: 'center',
@@ -75,21 +77,40 @@ export default function Header() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <h1 style={{ fontSize: '1.15rem', fontWeight: 700, letterSpacing: '-0.01em', margin: 0 }}>
-                Школьная Планёрка
+                {schoolInfo.shortName}
               </h1>
-              <span className="badge badge-primary hide-on-mobile" style={{ fontSize: '0.7rem' }}>
-                v1.0 • МАОУ СОШ
+              <span className="badge badge-primary hide-on-mobile" style={{ fontSize: '0.68rem', backgroundColor: '#e0f2fe', color: '#0369a1' }}>
+                Планёрка • ҚР
               </span>
+              {isCloudSyncing && (
+                <span className="badge badge-warning pulse" style={{ fontSize: '0.65rem' }}>
+                  Синхронизация...
+                </span>
+              )}
             </div>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>
-              Единый кабинет директора и администрации
+            <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: 0 }}>
+              {schoolInfo.kazName}
             </p>
           </div>
         </div>
 
-        {/* Действия: Переключение ролей, Уведомления, Тема */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-          {/* Кнопка PWA / Push уведомлений */}
+        {/* Действия: Kundelik, Push, Тема, Уведомления, Роль */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+          {/* Быстрый переход в Kundelik.kz */}
+          <a
+            href="https://kundelik.kz"
+            target="_blank"
+            rel="noreferrer"
+            className="btn-secondary btn-sm hide-on-mobile"
+            style={{ textDecoration: 'none', fontSize: '0.78rem', color: '#0284c7', borderColor: '#bae6fd' }}
+            title="Открыть электронный журнал Күнделік"
+          >
+            <BookOpen size={14} />
+            Kundelik.kz
+            <ExternalLink size={11} style={{ opacity: 0.6 }} />
+          </a>
+
+          {/* Кнопка Push уведомлений */}
           {pushStatus !== 'granted' && (
             <button 
               className="btn-secondary btn-sm hide-on-mobile"
@@ -97,12 +118,12 @@ export default function Header() {
               title="Включить браузерные пуш-уведомления"
               style={{ fontSize: '0.8rem', gap: '0.35rem' }}
             >
-              <Smartphone size={15} color="var(--color-primary)" />
+              <Smartphone size={14} color="var(--color-primary)" />
               Включить пуши
             </button>
           )}
 
-          {/* Тема оформления (Светлая / Темная) */}
+          {/* Тема оформления */}
           <button 
             className="btn-ghost btn-icon"
             onClick={toggleTheme}
@@ -169,7 +190,7 @@ export default function Header() {
                   paddingBottom: '0.5rem',
                   borderBottom: '1px solid var(--border-subtle)'
                 }}>
-                  <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>Уведомления</span>
+                  <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>Хабарламалар / Уведомления</span>
                   {unreadCount > 0 && (
                     <button 
                       onClick={markAllNotificationsRead}
@@ -211,7 +232,7 @@ export default function Header() {
             )}
           </div>
 
-          {/* Быстрый переключатель роли (демо для директора/учителей) */}
+          {/* Быстрый переключатель роли директора и педагогов */}
           <div style={{ position: 'relative' }}>
             <button
               onClick={() => {
@@ -236,7 +257,7 @@ export default function Header() {
                   {currentUser?.name?.split(' ')[0]} {currentUser?.name?.split(' ')[1]?.[0]}.
                 </div>
                 <div style={{ fontSize: '0.7rem', color: 'var(--color-primary-light)' }}>
-                  {currentUser?.roleTitle}
+                  {currentUser?.roleTitle?.split('(')[0]?.trim()}
                 </div>
               </div>
               <ChevronDown size={14} color="var(--text-muted)" />
@@ -248,7 +269,7 @@ export default function Header() {
                 position: 'absolute',
                 top: 'calc(100% + 8px)',
                 right: 0,
-                width: '290px',
+                width: '300px',
                 backgroundColor: 'var(--bg-surface-elevated)',
                 border: '1px solid var(--border-subtle)',
                 borderRadius: 'var(--radius-md)',
@@ -259,14 +280,14 @@ export default function Header() {
               }}>
                 <div style={{
                   padding: '0.4rem 0.6rem',
-                  fontSize: '0.75rem',
+                  fontSize: '0.72rem',
                   color: 'var(--text-muted)',
                   borderBottom: '1px solid var(--border-subtle)',
                   marginBottom: '0.4rem',
                   fontWeight: 600,
                   textTransform: 'uppercase'
                 }}>
-                  Быстрый вход под ролью:
+                  Педколлектив КГУ «СШ № 43»:
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
@@ -294,7 +315,7 @@ export default function Header() {
                         }}
                       >
                         <div className="avatar avatar-sm" style={{
-                          backgroundColor: member.role === 'director' ? 'var(--color-primary)' : undefined
+                          backgroundColor: member.role === 'director' ? '#0369a1' : undefined
                         }}>
                           {member.avatar}
                         </div>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { isSupabaseConfigured } from '../lib/supabaseClient';
+import { isSupabaseConfigured, testSupabaseConnection } from '../lib/supabaseClient';
 import { NotificationService } from '../lib/notificationService';
 import { 
   Settings, 
@@ -12,7 +12,9 @@ import {
   CheckCircle2, 
   AlertCircle,
   Copy,
-  ExternalLink
+  ExternalLink,
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
 import { INITIAL_STAFF, INITIAL_TASKS, INITIAL_MEETINGS, INITIAL_NOTIFICATIONS } from '../lib/mockData';
 
@@ -24,23 +26,31 @@ const GithubIcon = ({ size = 18, color = 'currentColor' }) => (
 );
 
 export default function SettingsTab() {
-  const { staff, tasks, meetings, setStaff, setTasks, setMeetings } = useAuth();
-  const [copiedSql, setCopiedSql] = useState(false);
+  const { schoolInfo, staff, tasks, meetings, setStaff, setTasks, setMeetings } = useAuth();
   const [pushStatus, setPushStatus] = useState(NotificationService.getPermissionStatus());
+  
+  // Тестирование Supabase
+  const [testingDb, setTestingDb] = useState(false);
+  const [dbTestResult, setDbTestResult] = useState(null);
 
   const isSupaActive = isSupabaseConfigured();
 
-  const handleCopySql = () => {
-    navigator.clipboard.writeText(`-- См. файл supabase/schema.sql в репозитории проекта`);
-    setCopiedSql(true);
-    setTimeout(() => setCopiedSql(false), 2000);
+  const handleRunDbTest = async () => {
+    setTestingDb(true);
+    setDbTestResult(null);
+    try {
+      const res = await testSupabaseConnection();
+      setDbTestResult(res);
+    } finally {
+      setTestingDb(false);
+    }
   };
 
   const handleRequestPush = async () => {
     const granted = await NotificationService.requestPermission();
     setPushStatus(NotificationService.getPermissionStatus());
     if (granted) {
-      NotificationService.send('Тестовое уведомление', {
+      NotificationService.send('КГУ «СШ № 43»', {
         body: 'Школьная Планёрка: уведомления успешно подключены!'
       });
     }
@@ -48,6 +58,7 @@ export default function SettingsTab() {
 
   const handleExportBackup = () => {
     const backupData = {
+      school: schoolInfo,
       timestamp: new Date().toISOString(),
       staff,
       tasks,
@@ -57,13 +68,13 @@ export default function SettingsTab() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `school_planner_backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `kgu_sch43_backup_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const handleResetDemoData = () => {
-    if (window.confirm('Сбросить все задачи, планёрки и учителей к начальным демо-данным?')) {
+    if (window.confirm('Сбросить все задачи, планёрки и учителей к эталонным данным КГУ «СШ № 43»?')) {
       setStaff(INITIAL_STAFF);
       setTasks(INITIAL_TASKS);
       setMeetings(INITIAL_MEETINGS);
@@ -90,10 +101,10 @@ export default function SettingsTab() {
         </div>
         <div>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>
-            Интеграции и Системные настройки
+            Интеграции и Системные настройки • {schoolInfo.shortName}
           </h2>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            Связь с Supabase, безлимитным GitHub хранилищем и PWA пушами
+            Связь с Supabase PostgreSQL, архивом документов GitHub и PWA пушами
           </div>
         </div>
       </div>
@@ -107,16 +118,16 @@ export default function SettingsTab() {
               <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: 0 }}>База данных Supabase</h3>
             </div>
             {isSupaActive ? (
-              <span className="badge badge-success"><CheckCircle2 size={12} /> Подключено</span>
+              <span className="badge badge-success"><CheckCircle2 size={12} /> Ключи заданы</span>
             ) : (
-              <span className="badge badge-warning"><AlertCircle size={12} /> Демо-режим (Local)</span>
+              <span className="badge badge-warning"><AlertCircle size={12} /> Автономный режим</span>
             )}
           </div>
 
           <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
             {isSupaActive 
-              ? 'База данных PostgreSQL в Supabase активна. Все изменения синхронизируются в облаке.'
-              : 'Приложение работает через локальное хранилище браузера (LocalStorage). Чтобы включить облачную синхронизацию, укажите ключи в файле .env или на Vercel:'}
+              ? 'Ключи Supabase подключены. Все действия директора и учителей синхронизируются в реальном времени.'
+              : 'Приложение работает через быстрое локальное хранилище браузера (LocalStorage). Для синхронизации между разными устройствами добавьте переменные в файл .env или на Vercel:'}
           </p>
 
           <div style={{
@@ -132,8 +143,34 @@ export default function SettingsTab() {
             VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
           </div>
 
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            Готовый SQL-скрипт создания всех таблиц находится в файле: <code>supabase/schema.sql</code>.
+          {/* Кнопка тестирования связи */}
+          <div style={{ marginTop: '0.75rem' }}>
+            <button 
+              className="btn-secondary btn-sm"
+              onClick={handleRunDbTest}
+              disabled={testingDb}
+              style={{ width: '100%', justifyContent: 'center' }}
+            >
+              {testingDb ? <Loader2 size={14} className="pulse" /> : <RefreshCw size={14} />}
+              Проверить связь с базой Supabase
+            </button>
+
+            {dbTestResult && (
+              <div style={{
+                marginTop: '0.65rem',
+                padding: '0.65rem 0.8rem',
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: dbTestResult.connected ? 'var(--color-success-bg)' : 'var(--color-warning-bg)',
+                color: dbTestResult.connected ? 'var(--color-success-text)' : 'var(--color-warning-text)',
+                fontSize: '0.78rem',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '0.45rem'
+              }}>
+                {dbTestResult.connected ? <CheckCircle2 size={15} style={{ flexShrink: 0, marginTop: '2px' }} /> : <AlertCircle size={15} style={{ flexShrink: 0, marginTop: '2px' }} />}
+                <div>{dbTestResult.message}</div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -148,7 +185,7 @@ export default function SettingsTab() {
           </div>
 
           <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-            Файлы отчетов (Word, Excel, PDF) учителей сохраняются в выделенный GitHub-репозиторий через Vercel API. Это исключает переполнение бесплатного тарифа Supabase.
+            Файлы отчетов (Word, Excel, PDF, сканы СОР/СОЧ) учителей сохраняются в выделенный GitHub-репозиторий через Vercel Serverless API (`/api/upload`).
           </p>
 
           <div style={{
@@ -160,12 +197,12 @@ export default function SettingsTab() {
             margin: '0.75rem 0',
             lineHeight: 1.4
           }}>
-            GITHUB_STORAGE_REPO=Stormyxa/school-archive<br />
-            GITHUB_STORAGE_TOKEN=ghp_your_secret_pat
+            GITHUB_STORAGE_REPO=Stormyxa/school-archive-storage<br />
+            GITHUB_STORAGE_TOKEN=ghp_...
           </div>
 
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            Токен настраивается в панели Vercel (Settings → Environment Variables) и надежно защищен.
+            Настраивается в панели Vercel (Settings → Environment Variables) и защищен от учителей.
           </div>
         </div>
 
@@ -184,17 +221,17 @@ export default function SettingsTab() {
           </div>
 
           <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-            Приложение поддерживает установку на смартфон или рабочий стол ПК директора без необходимости скачивания из AppStore / Google Play.
+            Установите ярлык планёрки на рабочий стол смартфона директора (iPhone/Android) или ПК в один клик.
           </p>
 
           <div style={{ marginTop: '1rem' }}>
             <button 
               className="btn-primary btn-sm"
               onClick={handleRequestPush}
-              style={{ width: '100%' }}
+              style={{ width: '100%', justifyContent: 'center' }}
             >
               <Bell size={15} />
-              {pushStatus === 'granted' ? 'Проверить тестовый пуш' : 'Запросить разрешение на уведомления'}
+              {pushStatus === 'granted' ? 'Отправить тестовый пуш директора' : 'Запросить разрешение на уведомления'}
             </button>
           </div>
         </div>
@@ -203,21 +240,21 @@ export default function SettingsTab() {
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
             <Download size={20} color="var(--color-primary)" />
-            <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: 0 }}>Резервные копии школы</h3>
+            <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: 0 }}>Архив и Бэкап КГУ «СШ № 43»</h3>
           </div>
 
           <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-            Вы можете в любой момент выгрузить полный архив всех поручений, протоколов планёрок и карточек педагогов в файл JSON.
+            Выгрузка полного архива поручений, протоколов планёрок и карточек педагогов в формате JSON.
           </p>
 
           <div style={{ display: 'flex', gap: '0.6rem', marginTop: '1rem', flexWrap: 'wrap' }}>
             <button className="btn-secondary btn-sm" onClick={handleExportBackup}>
               <Download size={14} />
-              Выгрузить копию (JSON)
+              Скачать копию (JSON)
             </button>
             <button className="btn-ghost btn-sm" style={{ color: 'var(--color-danger)' }} onClick={handleResetDemoData}>
               <RotateCcw size={14} />
-              Сброс к демо-данным
+              Сброс к эталону СШ № 43
             </button>
           </div>
         </div>
