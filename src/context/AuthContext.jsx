@@ -253,6 +253,20 @@ export function AuthProvider({ children }) {
   staffRef.current = staff;
   const currentUserRef = useRef(currentUser);
   currentUserRef.current = currentUser;
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
+  const loadFromSupabaseRef = useRef(null);
+
+  // Набор ID уведомлений, о которых пользователь УЖЕ получил push/toast (сохраняется в sessionStorage)
+  const alertedNotifIdsRef = useRef(new Set());
+  try {
+    const savedAlerted = sessionStorage.getItem('sp_alerted_notif_ids_kz');
+    if (savedAlerted) {
+      alertedNotifIdsRef.current = new Set(JSON.parse(savedAlerted));
+    }
+  } catch {
+    // fallback
+  }
 
   // ==========================================================================
   // ГЛАВНАЯ ФУНКЦИЯ ДИНАМИЧЕСКОЙ СИНХРОНИЗАЦИИ С SUPABASE
@@ -394,18 +408,22 @@ export function AuthProvider({ children }) {
             taskId: n.task_id || null
           }));
 
-          setNotifications(prev => {
-            // Резервное уведомление: если в тихом фоне пришло новое непрочитанное
-            if (isSilent && prev.length > 0) {
-              const prevIds = new Set(prev.map(p => p.id));
-              const newlyArrived = mappedN.filter(n => !prevIds.has(n.id) && !n.read);
-              newlyArrived.slice(0, 3).forEach(n => {
-                showToast(n.title, n.message, n.type, n.taskId);
-                NotificationService.send(n.title, { body: n.message, taskId: n.taskId });
-              });
+          // Находим новые непрочитанные уведомления, о которых пользователь ещё НЕ был оповещен
+          const unalerted = mappedN.filter(n => !n.read && !alertedNotifIdsRef.current.has(n.id));
+          if (unalerted.length > 0) {
+            unalerted.forEach(n => {
+              alertedNotifIdsRef.current.add(n.id);
+              showToastRef.current(n.title, n.message, n.type, n.taskId);
+              NotificationService.send(n.title, { body: n.message, taskId: n.taskId });
+            });
+            try {
+              sessionStorage.setItem('sp_alerted_notif_ids_kz', JSON.stringify(Array.from(alertedNotifIdsRef.current).slice(-100)));
+            } catch {
+              // ignore
             }
+          }
 
-            // Оставляем только серверные уведомления (UUID id), удаляем дубликаты
+          setNotifications(prev => {
             const map = new Map();
             mappedN.forEach(n => map.set(n.id, n));
             // Добавляем только локальные (не-UUID) которых ещё нет на сервере
@@ -427,96 +445,149 @@ export function AuthProvider({ children }) {
     } finally {
       if (!isSilent) setIsCloudSyncing(false);
     }
-  }, [resolveProfileUuid, showToast]);
+  }, [resolveProfileUuid]);
+
+  // Сохраняем актуальную ссылку на loadFromSupabase
+  loadFromSupabaseRef.current = loadFromSupabase;
 
   // Запуск синхронизации при монтировании и при смене пользователя
   useEffect(() => {
     loadFromSupabase(false);
-  }, [loadFromSupabase, currentUser?.id]);
+  }, [currentUser?.id]);
 
   // Живое обновление через Realtime WebSockets: слушаем входящие уведомления для СЕБЯ
+  // Запускается РОВНО ОДИН РАЗ, никогда не пересоздается при изменении стейта!
   useEffect(() => {
     if (!isSupabaseConfigured() || !supabase) return;
 
-    const channel = supabase
-      .channel('school_planner_realtime_kz')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
-        const notif = payload.new;
-        const current = currentUserRef.current;
-        if (!current) return;
+    let activeChannel = null;
+    let reconnectTimeout = null;
+    let isDisposed = false;
 
-        // Резолвим uuid через staffRef (надёжно — staff уже загружен к этому моменту)
-        const currentStaff = staffRef.current;
-        const me = currentStaff.find(s =>
-          s.id === current.id ||
-          (s.login && s.login.toLowerCase() === current.login?.toLowerCase())
-        );
-        const myUuid = me?.id || (isUuid(current.id) ? current.id : null);
+    const setupRealtimeChannel = () => {
+      if (isDisposed) return;
 
-        // Уведомление предназначается ТОЛЬКО МНЕ (проверяем все возможные идентификаторы)
-        const isTargetingMe = Boolean(
-          notif.user_id && (
-            notif.user_id === myUuid ||
-            notif.user_id === current.id ||
-            (me && notif.user_id === me.id)
-          )
-        );
+      // Уникальный топик канала исключает любые конфликты параллельных переподключений
+      const channelName = `sp_realtime_${Math.random().toString(36).slice(2, 9)}`;
 
-        if (isTargetingMe) {
-          const taskId = notif.task_id || null;
-          showToast(notif.title, notif.message, notif.type || 'task', taskId);
-          NotificationService.send(notif.title, { body: notif.message, taskId });
-          // Добавляем уведомление прямо в state без полного reload
-          setNotifications(prev => {
-            const newNotif = {
-              id: notif.id,
-              title: notif.title,
-              message: notif.message,
-              time: new Date(notif.created_at || Date.now()).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-              read: false,
-              type: notif.type || 'task',
-              taskId
-            };
-            const updated = [newNotif, ...prev.filter(p => p.id !== notif.id)].slice(0, 20);
-            localStorage.setItem('sp_notifications_kz43', JSON.stringify(updated));
-            return updated;
-          });
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
-        loadFromSupabase(true);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' }, () => {
-        loadFromSupabase(true);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-        loadFromSupabase(true);
-      })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('[Realtime] Connected to school_planner_realtime_kz');
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          console.warn('[Realtime] Connection issue:', status);
-        }
-      });
+      activeChannel = supabase
+        .channel(channelName)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload) => {
+          const notif = payload.new;
+          const current = currentUserRef.current;
+          if (!current || !notif) return;
+
+          const currentStaff = staffRef.current;
+          const me = currentStaff.find(s =>
+            s.id === current.id ||
+            (s.login && s.login.toLowerCase() === current.login?.toLowerCase())
+          );
+          const myUuid = me?.id || (isUuid(current.id) ? current.id : null);
+
+          const isTargetingMe = Boolean(
+            notif.user_id && (
+              notif.user_id === myUuid ||
+              notif.user_id === current.id ||
+              (me && notif.user_id === me.id)
+            )
+          );
+
+          if (isTargetingMe) {
+            // Запоминаем ID, чтобы фоновый опрос не дублировал алерт
+            alertedNotifIdsRef.current.add(notif.id);
+            try {
+              sessionStorage.setItem('sp_alerted_notif_ids_kz', JSON.stringify(Array.from(alertedNotifIdsRef.current).slice(-100)));
+            } catch {}
+
+            const taskId = notif.task_id || null;
+            showToastRef.current(notif.title, notif.message, notif.type || 'task', taskId);
+            NotificationService.send(notif.title, { body: notif.message, taskId });
+
+            setNotifications(prev => {
+              const newNotif = {
+                id: notif.id,
+                title: notif.title,
+                message: notif.message,
+                time: new Date(notif.created_at || Date.now()).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+                read: false,
+                type: notif.type || 'task',
+                taskId
+              };
+              const updated = [newNotif, ...prev.filter(p => p.id !== notif.id)].slice(0, 20);
+              localStorage.setItem('sp_notifications_kz43', JSON.stringify(updated));
+              return updated;
+            });
+          }
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
+          loadFromSupabaseRef.current?.(true);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' }, () => {
+          loadFromSupabaseRef.current?.(true);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+          loadFromSupabaseRef.current?.(true);
+        })
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            console.log('[Realtime] Connected successfully:', channelName);
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            console.warn('[Realtime] Channel status:', status, 'Scheduling reconnect in 2.5s...');
+            if (!isDisposed) {
+              clearTimeout(reconnectTimeout);
+              reconnectTimeout = setTimeout(() => {
+                if (activeChannel) {
+                  try { supabase.removeChannel(activeChannel); } catch {}
+                }
+                setupRealtimeChannel();
+              }, 2500);
+            }
+          }
+        });
+    };
+
+    setupRealtimeChannel();
 
     return () => {
-      supabase.removeChannel(channel);
+      isDisposed = true;
+      clearTimeout(reconnectTimeout);
+      if (activeChannel) {
+        try { supabase.removeChannel(activeChannel); } catch {}
+      }
     };
-  }, [loadFromSupabase, showToast]);
+  }, []);
 
-  // Фоновый тихий опрос каждые 7 секунд (только когда страница открыта)
+  // Мгновенная синхронизация при пробуждении экрана, разблокировке телефона и возврате в PWA
+  useEffect(() => {
+    const handleWake = () => {
+      if (!document.hidden) {
+        loadFromSupabaseRef.current?.(true);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleWake);
+    window.addEventListener('focus', handleWake);
+    window.addEventListener('online', handleWake);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleWake);
+      window.removeEventListener('focus', handleWake);
+      window.removeEventListener('online', handleWake);
+    };
+  }, []);
+
+  // Фоновый тихий опрос каждые 5 секунд (надежный резервный канал)
   useEffect(() => {
     if (!isSupabaseConfigured() || !supabase) return;
 
     const interval = setInterval(() => {
       if (!document.hidden) {
-        loadFromSupabase(true);
+        loadFromSupabaseRef.current?.(true);
       }
-    }, 7000);
+    }, 5000);
 
     return () => clearInterval(interval);
-  }, [loadFromSupabase]);
+  }, []);
 
   const toggleTheme = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');

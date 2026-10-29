@@ -10,10 +10,9 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // 1. Если приложение открыто (свернуто или активно) — фокусируемся на нем
+      // 1. Если приложение открыто (свернуто или активно) — фокусируемся и открываем задачу без перезагрузки SPA
       for (const client of windowClients) {
         if (client.url.includes(self.location.origin)) {
-          client.navigate(targetUrl);
           client.postMessage({
             type: 'NOTIFICATION_OPEN_TASK',
             taskId: data.taskId,

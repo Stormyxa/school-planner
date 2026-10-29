@@ -50,14 +50,14 @@ export const NotificationService = {
     const body = options.body || '';
     const targetUrl = taskId ? `/?openTaskId=${taskId}&tab=tasks` : '/';
 
-    // Формируем payload строго — data НЕ перезатирается
+    // Формируем payload строго — data НЕ перезатирается, tag уникален для каждого события
     const notifOptions = {
       body,
-      icon: '/pwa-192x192.png',
+      icon: '/school43logo.png',
       badge: '/badge-96x96.png',
-      image: '/pwa-512x512.png',
+      image: '/school43logo.png',
       vibrate: [250, 100, 250],
-      tag: options.tag || `school43-${taskId || Date.now()}`,
+      tag: options.tag || `school43-${taskId || 'notif'}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       renotify: true,
       requireInteraction: false,
       data: {
