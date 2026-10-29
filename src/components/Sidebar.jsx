@@ -11,15 +11,15 @@ import {
 import { useAuth } from '../context/AuthContext';
 
 export default function Sidebar({ activeTab, setActiveTab, onOpenNewTask, onOpenNewMeeting }) {
-  const { isDirector, isHeadTeacher } = useAuth();
+  const { isDirector, isHeadTeacher, t, schoolInfo } = useAuth();
 
   const navItems = [
-    { id: 'dashboard', label: 'Пульс школы', icon: LayoutDashboard },
-    { id: 'planner', label: 'Планёрка', icon: CalendarDays },
-    { id: 'tasks', label: 'Поручения', icon: CheckSquare },
-    { id: 'documents', label: 'Сбор отчетов', icon: FolderDown },
-    { id: 'staff', label: 'Педколлектив', icon: Users },
-    { id: 'settings', label: 'Интеграции', icon: Settings },
+    { id: 'dashboard', label: t('navPulse'), icon: LayoutDashboard },
+    { id: 'planner', label: t('navPlanner'), icon: CalendarDays },
+    { id: 'tasks', label: t('navTasks'), icon: CheckSquare },
+    { id: 'documents', label: t('navDocs'), icon: FolderDown },
+    { id: 'staff', label: t('navStaff'), icon: Users },
+    { id: 'settings', label: t('navSettings'), icon: Settings },
   ];
 
   return (
@@ -46,7 +46,7 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenNewTask, onOpen
                 style={{ width: '100%', justifyContent: 'flex-start' }}
               >
                 <PlusCircle size={18} />
-                Дать поручение
+                {t('btnNewTask')}
               </button>
               <button 
                 onClick={onOpenNewMeeting}
@@ -54,7 +54,7 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenNewTask, onOpen
                 style={{ width: '100%', justifyContent: 'flex-start', fontSize: '0.85rem' }}
               >
                 <CalendarDays size={17} color="var(--color-primary-light)" />
-                Назначить планёрку
+                {t('btnNewMeeting')}
               </button>
             </div>
           )}
@@ -101,11 +101,11 @@ export default function Sidebar({ activeTab, setActiveTab, onOpenNewTask, onOpen
           lineHeight: 1.4
         }}>
           <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.2rem' }}>
-            2026/2027 Учебный год
+            {schoolInfo.shortName}
           </div>
-          <div>1 четверть • Осенний семестр</div>
+          <div>{t('academicYear')}</div>
           <div style={{ marginTop: '0.4rem', color: 'var(--color-success)', fontWeight: 600 }}>
-            ● Сервер активен
+            ● {t('systemStatus')}
           </div>
         </div>
       </aside>

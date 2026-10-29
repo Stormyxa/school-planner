@@ -5,28 +5,30 @@ import {
   Bell, 
   Moon, 
   Sun, 
-  ChevronDown, 
   CheckCircle2, 
   Smartphone,
   School,
   ExternalLink,
-  BookOpen
+  BookOpen,
+  Globe,
+  LogOut
 } from 'lucide-react';
 
 export default function Header() {
   const { 
     schoolInfo,
     currentUser, 
-    staff, 
-    switchUser, 
     theme, 
     toggleTheme, 
+    lang,
+    toggleLanguage,
+    t,
+    logout,
     notifications,
     markAllNotificationsRead,
     isCloudSyncing
   } = useAuth();
 
-  const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const [pushStatus, setPushStatus] = useState(NotificationService.getPermissionStatus());
 
@@ -36,7 +38,7 @@ export default function Header() {
     const granted = await NotificationService.requestPermission();
     setPushStatus(NotificationService.getPermissionStatus());
     if (granted) {
-      NotificationService.send('КГУ «СШ № 43»', {
+      NotificationService.send(schoolInfo.shortName, {
         body: 'Уведомления включены! Вы будете вовремя узнавать о поручениях директора и сроках сдачи СОР/СОЧ.'
       });
     }
@@ -59,13 +61,13 @@ export default function Header() {
         paddingTop: '0.75rem',
         paddingBottom: '0.75rem'
       }}>
-        {/* Логотип и Название Школы: КГУ «СШ № 43» */}
+        {/* Логотип школы КГУ «СШ № 43» */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
           <div style={{
             width: '42px',
             height: '42px',
             borderRadius: 'var(--radius-md)',
-            background: 'linear-gradient(135deg, #0284c7 0%, #1e3a8a 100%)', // Небесно-голубой и индиго (Казахстанский мотив)
+            background: 'linear-gradient(135deg, #0284c7 0%, #1e3a8a 100%)',
             color: '#fff',
             display: 'flex',
             alignItems: 'center',
@@ -84,26 +86,43 @@ export default function Header() {
               </span>
               {isCloudSyncing && (
                 <span className="badge badge-warning pulse" style={{ fontSize: '0.65rem' }}>
-                  Синхронизация...
+                  Sync...
                 </span>
               )}
             </div>
             <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: 0 }}>
-              {schoolInfo.kazName}
+              {lang === 'kk' ? schoolInfo.kazName : schoolInfo.name}
             </p>
           </div>
         </div>
 
-        {/* Действия: Kundelik, Push, Тема, Уведомления, Роль */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-          {/* Быстрый переход в Kundelik.kz */}
+        {/* Действия: Язык, Kundelik, Push, Тема, Уведомления, Профиль, Выход */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {/* Переключатель языка: 🇰🇿 ҚАЗ / 🇷🇺 РУС */}
+          <button
+            onClick={toggleLanguage}
+            className="btn-secondary btn-sm"
+            style={{
+              padding: '0.35rem 0.65rem',
+              borderRadius: 'var(--radius-full)',
+              gap: '0.35rem',
+              fontWeight: 600,
+              fontSize: '0.78rem'
+            }}
+            title="Тілді өзгерту / Сменить язык"
+          >
+            <Globe size={14} color="#0284c7" />
+            <span>{lang === 'ru' ? 'ҚАЗ' : 'РУС'}</span>
+          </button>
+
+          {/* Быстрая ссылка на Kundelik.kz */}
           <a
             href="https://kundelik.kz"
             target="_blank"
             rel="noreferrer"
             className="btn-secondary btn-sm hide-on-mobile"
             style={{ textDecoration: 'none', fontSize: '0.78rem', color: '#0284c7', borderColor: '#bae6fd' }}
-            title="Открыть электронный журнал Күнделік"
+            title="Kundelik.kz электронды журналы"
           >
             <BookOpen size={14} />
             Kundelik.kz
@@ -119,7 +138,7 @@ export default function Header() {
               style={{ fontSize: '0.8rem', gap: '0.35rem' }}
             >
               <Smartphone size={14} color="var(--color-primary)" />
-              Включить пуши
+              {t('btnEnablePush')}
             </button>
           )}
 
@@ -137,12 +156,9 @@ export default function Header() {
           <div style={{ position: 'relative' }}>
             <button 
               className="btn-ghost btn-icon"
-              onClick={() => {
-                setShowNotifMenu(!showNotifMenu);
-                setShowRoleMenu(false);
-              }}
+              onClick={() => setShowNotifMenu(!showNotifMenu)}
               style={{ position: 'relative' }}
-              title="Уведомления"
+              title="Хабарламалар"
             >
               <Bell size={19} />
               {unreadCount > 0 && (
@@ -196,7 +212,7 @@ export default function Header() {
                       onClick={markAllNotificationsRead}
                       style={{ fontSize: '0.75rem', color: 'var(--color-primary-light)', padding: 0 }}
                     >
-                      Прочитать все
+                      Оқу / Прочитать
                     </button>
                   )}
                 </div>
@@ -204,7 +220,7 @@ export default function Header() {
                 <div style={{ maxHeight: '280px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   {notifications.length === 0 ? (
                     <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>
-                      Нет новых уведомлений
+                      Жаңа хабарлама жоқ
                     </p>
                   ) : (
                     notifications.map(notif => (
@@ -212,7 +228,7 @@ export default function Header() {
                         padding: '0.6rem',
                         borderRadius: 'var(--radius-sm)',
                         backgroundColor: notif.read ? 'transparent' : 'var(--bg-surface-subtle)',
-                        borderLeft: notif.read ? '2px solid transparent' : '3px solid var(--color-primary-light)',
+                        borderLeft: notif.read ? '2px solid transparent' : '3px solid #0284c7',
                         fontSize: '0.8rem'
                       }}>
                         <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.2rem' }}>
@@ -232,108 +248,37 @@ export default function Header() {
             )}
           </div>
 
-          {/* Быстрый переключатель роли директора и педагогов */}
-          <div style={{ position: 'relative' }}>
+          {/* Профиль текущего пользователя (Директор / Завуч / Учитель) */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.6rem',
+            padding: '0.35rem 0.65rem',
+            borderRadius: 'var(--radius-full)',
+            backgroundColor: 'var(--bg-surface-subtle)',
+            border: '1px solid var(--border-subtle)'
+          }}>
+            <div className="avatar avatar-sm" style={{ backgroundColor: '#0284c7' }}>
+              {currentUser?.avatar || 'У'}
+            </div>
+            <div style={{ textAlign: 'left', lineHeight: 1.1 }} className="hide-on-mobile">
+              <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>
+                {currentUser?.name?.split(' ')[0]} {currentUser?.name?.split(' ')[1]?.[0]}.
+              </div>
+              <div style={{ fontSize: '0.68rem', color: 'var(--color-primary-light)' }}>
+                {currentUser?.roleTitle?.split('(')[0]?.trim()}
+              </div>
+            </div>
+
+            {/* Кнопка выхода */}
             <button
-              onClick={() => {
-                setShowRoleMenu(!showRoleMenu);
-                setShowNotifMenu(false);
-              }}
-              className="btn-secondary"
-              style={{
-                padding: '0.4rem 0.75rem',
-                borderRadius: 'var(--radius-full)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.6rem'
-              }}
-              title="Переключить роль (Директор / Завуч / Учитель)"
+              onClick={logout}
+              className="btn-ghost"
+              style={{ padding: '0.25rem', color: 'var(--color-danger)' }}
+              title={t('logout')}
             >
-              <div className="avatar avatar-sm">
-                {currentUser?.avatar || 'У'}
-              </div>
-              <div style={{ textAlign: 'left', lineHeight: 1.1 }} className="hide-on-mobile">
-                <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>
-                  {currentUser?.name?.split(' ')[0]} {currentUser?.name?.split(' ')[1]?.[0]}.
-                </div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--color-primary-light)' }}>
-                  {currentUser?.roleTitle?.split('(')[0]?.trim()}
-                </div>
-              </div>
-              <ChevronDown size={14} color="var(--text-muted)" />
+              <LogOut size={16} />
             </button>
-
-            {/* Меню смены пользователей */}
-            {showRoleMenu && (
-              <div style={{
-                position: 'absolute',
-                top: 'calc(100% + 8px)',
-                right: 0,
-                width: '300px',
-                backgroundColor: 'var(--bg-surface-elevated)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: 'var(--radius-md)',
-                boxShadow: 'var(--shadow-xl)',
-                zIndex: 100,
-                padding: '0.6rem',
-                animation: 'slideUp 0.15s ease-out'
-              }}>
-                <div style={{
-                  padding: '0.4rem 0.6rem',
-                  fontSize: '0.72rem',
-                  color: 'var(--text-muted)',
-                  borderBottom: '1px solid var(--border-subtle)',
-                  marginBottom: '0.4rem',
-                  fontWeight: 600,
-                  textTransform: 'uppercase'
-                }}>
-                  Педколлектив КГУ «СШ № 43»:
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                  {staff.map(member => {
-                    const isSelected = member.id === currentUser?.id;
-                    return (
-                      <button
-                        key={member.id}
-                        onClick={() => {
-                          switchUser(member.id);
-                          setShowRoleMenu(false);
-                        }}
-                        style={{
-                          width: '100%',
-                          textAlign: 'left',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.65rem',
-                          padding: '0.5rem 0.6rem',
-                          borderRadius: 'var(--radius-sm)',
-                          backgroundColor: isSelected ? 'var(--color-primary-bg)' : 'transparent',
-                          color: isSelected ? 'var(--color-primary)' : 'var(--text-primary)',
-                          border: 'none',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <div className="avatar avatar-sm" style={{
-                          backgroundColor: member.role === 'director' ? '#0369a1' : undefined
-                        }}>
-                          {member.avatar}
-                        </div>
-                        <div style={{ flex: 1, overflow: 'hidden' }}>
-                          <div style={{ fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {member.name}
-                          </div>
-                          <div style={{ fontSize: '0.7rem', color: isSelected ? 'var(--color-primary)' : 'var(--text-muted)' }}>
-                            {member.roleTitle}
-                          </div>
-                        </div>
-                        {isSelected && <CheckCircle2 size={16} color="var(--color-primary)" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>

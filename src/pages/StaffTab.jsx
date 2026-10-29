@@ -8,14 +8,13 @@ import {
   Check, 
   Printer, 
   Search, 
-  Phone, 
   Mail, 
   GraduationCap,
   ShieldCheck
 } from 'lucide-react';
 
 export default function StaffTab() {
-  const { staff, addStaffMember, isDirector } = useAuth();
+  const { staff, addStaffMember, isDirector, t, schoolInfo } = useAuth();
 
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -25,7 +24,7 @@ export default function StaffTab() {
   // Форма добавления сотрудника
   const [name, setName] = useState('');
   const [role, setRole] = useState('teacher');
-  const [roleTitle, setRoleTitle] = useState('Учитель');
+  const [roleTitle, setRoleTitle] = useState('Мұғалім / Учитель');
   const [subject, setSubject] = useState('');
   const [classLeader, setClassLeader] = useState('');
   const [login, setLogin] = useState('');
@@ -43,7 +42,7 @@ export default function StaffTab() {
   });
 
   const handleCopyCredentials = (member) => {
-    const text = `Вход в Школьную Планёрку:\nСайт: school-planner\nЛогин: ${member.login}\nПароль: ${member.passHint}\nФИО: ${member.name}`;
+    const text = `КГУ «СШ № 43» — Вход в Школьную Планёрку:\nЛогин: ${member.login}\nПароль: ${member.passHint}\nПедагог: ${member.name} (${member.roleTitle})`;
     navigator.clipboard.writeText(text);
     setCopiedId(member.id);
     setTimeout(() => setCopiedId(null), 2500);
@@ -53,20 +52,20 @@ export default function StaffTab() {
     window.print();
   };
 
-  const handleAddSubmit = (e) => {
+  const handleAddSubmit = async (e) => {
     e.preventDefault();
     if (!name.trim() || !login.trim()) return;
 
-    addStaffMember({
+    await addStaffMember({
       name: name.trim(),
       role,
       roleTitle: roleTitle.trim() || (role === 'teacher' ? 'Учитель' : 'Заместитель директора'),
       subject: subject.trim() || 'Общие дисциплины',
       classLeader: classLeader.trim() || undefined,
-      email: `${login.trim()}@school.edu`,
-      phone: '+7 (___) ___-__-__',
+      email: `${login.trim()}@sch43.kz`,
+      phone: '+7 (7__) ___-__-__',
       login: login.trim().toLowerCase(),
-      passHint: passHint.trim() || 'school2026'
+      passHint: passHint.trim() || 'school43kz'
     });
 
     setShowAddModal(false);
@@ -103,10 +102,10 @@ export default function StaffTab() {
           </div>
           <div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>
-              Педагогический коллектив и Доступы
+              {t('navStaff')} • {schoolInfo.shortName}
             </h2>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Администрирование учетных записей учителей и руководства школы
+              Администрирование учетных записей педагогов и руководства школы
             </div>
           </div>
         </div>
@@ -114,12 +113,12 @@ export default function StaffTab() {
         <div style={{ display: 'flex', gap: '0.6rem' }}>
           <button className="btn-secondary btn-sm hide-on-mobile" onClick={handlePrintStaff}>
             <Printer size={15} />
-            Распечатать ведомость паролей
+            {t('btnPrintPasswords')}
           </button>
           {isDirector && (
             <button className="btn-primary btn-sm" onClick={() => setShowAddModal(true)}>
               <UserPlus size={16} />
-              Добавить педагога
+              {t('btnAddStaff')}
             </button>
           )}
         </div>
@@ -132,19 +131,19 @@ export default function StaffTab() {
             onClick={() => setRoleFilter('all')} 
             className={roleFilter === 'all' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}
           >
-            Все сотрудники ({staff.length})
+            Барлығы ({staff.length})
           </button>
           <button 
             onClick={() => setRoleFilter('head_teacher')} 
             className={roleFilter === 'head_teacher' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}
           >
-            Администрация / Завучи
+            Әкімшілік (Завучтер)
           </button>
           <button 
             onClick={() => setRoleFilter('teacher')} 
             className={roleFilter === 'teacher' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}
           >
-            Учителя
+            Мұғалімдер
           </button>
         </div>
 
@@ -152,7 +151,7 @@ export default function StaffTab() {
           <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
           <input
             type="text"
-            placeholder="Поиск по имени, предмету, логину..."
+            placeholder="Іздеу / Поиск педагога..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{ paddingLeft: '2.1rem', fontSize: '0.85rem' }}
@@ -185,7 +184,7 @@ export default function StaffTab() {
                 ) : member.role === 'head_teacher' ? (
                   <span className="badge badge-purple">Завуч</span>
                 ) : (
-                  <span className="badge badge-neutral">Учитель</span>
+                  <span className="badge badge-neutral">Мұғалім</span>
                 )}
               </div>
 
@@ -196,7 +195,7 @@ export default function StaffTab() {
                 </div>
                 {member.classLeader && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: 'var(--color-primary)' }}>
-                    <span>🏫 Руководитель: <strong>{member.classLeader}</strong></span>
+                    <span>🏫 Сынып жетекшісі: <strong>{member.classLeader}</strong></span>
                   </div>
                 )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
@@ -206,7 +205,7 @@ export default function StaffTab() {
               </div>
             </div>
 
-            {/* Карточка доступов для входа (Логин / Пароль) */}
+            {/* Карточка доступов для входа */}
             <div style={{
               backgroundColor: 'var(--bg-surface-subtle)',
               padding: '0.65rem 0.8rem',
@@ -215,7 +214,7 @@ export default function StaffTab() {
               marginTop: '0.5rem'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>
-                <span>Данные для входа:</span>
+                <span>{t('staffCredentials')}:</span>
                 <button
                   onClick={() => handleCopyCredentials(member)}
                   className="btn-ghost"
@@ -225,20 +224,20 @@ export default function StaffTab() {
                   {copiedId === member.id ? (
                     <>
                       <Check size={12} color="var(--color-success)" />
-                      Скопировано
+                      {t('staffCopied')}
                     </>
                   ) : (
                     <>
                       <Copy size={12} />
-                      Копировать
+                      {t('staffCopy')}
                     </>
                   )}
                 </button>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', fontFamily: 'monospace' }}>
-                <span>Логин: <strong>{member.login}</strong></span>
-                <span>Пароль: <strong>{member.passHint}</strong></span>
+                <span>{t('staffLogin')}: <strong>{member.login}</strong></span>
+                <span>{t('staffPassword')}: <strong>{member.passHint}</strong></span>
               </div>
             </div>
           </div>
@@ -250,18 +249,18 @@ export default function StaffTab() {
         <div className="modal-backdrop" onClick={() => setShowAddModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2 className="modal-title">Добавить нового сотрудника школы</h2>
+              <h2 className="modal-title">Жаңа педагогті қосу / Добавить сотрудника</h2>
               <button className="btn-ghost btn-icon" onClick={() => setShowAddModal(false)}>✕</button>
             </div>
 
             <form onSubmit={handleAddSubmit}>
               <div className="modal-body">
                 <div className="form-group">
-                  <label className="form-label">ФИО сотрудника полностью *</label>
+                  <label className="form-label">ФИО педагога толығымен *</label>
                   <input
                     type="text"
                     required
-                    placeholder="Например: Васильева Екатерина Сергеевна"
+                    placeholder="Мысалы: Төлеубаева Жанар Серікқызы"
                     value={name}
                     onChange={e => {
                       setName(e.target.value);
@@ -276,22 +275,22 @@ export default function StaffTab() {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div className="form-group">
-                    <label className="form-label">Роль в системе</label>
+                    <label className="form-label">Рөлі / Роль</label>
                     <select value={role} onChange={e => {
                       setRole(e.target.value);
                       if (e.target.value === 'head_teacher') setRoleTitle('Заместитель директора');
                       else setRoleTitle('Учитель');
                     }}>
-                      <option value="teacher">Учитель</option>
-                      <option value="head_teacher">Завуч (Администрация)</option>
+                      <option value="teacher">Мұғалім (Учитель)</option>
+                      <option value="head_teacher">Оқу ісінің меңгерушісі (Завуч)</option>
                     </select>
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Должность в школе</label>
+                    <label className="form-label">Лауазымы / Должность</label>
                     <input
                       type="text"
-                      placeholder="Учитель биологии и химии"
+                      placeholder="Қазақ тілі мен әдебиеті мұғалімі"
                       value={roleTitle}
                       onChange={e => setRoleTitle(e.target.value)}
                     />
@@ -300,20 +299,20 @@ export default function StaffTab() {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div className="form-group">
-                    <label className="form-label">Предмет(ы)</label>
+                    <label className="form-label">Пәні / Предмет(ы)</label>
                     <input
                       type="text"
-                      placeholder="Биология, Химия"
+                      placeholder="Қазақ тілі, Қазақ әдебиеті"
                       value={subject}
                       onChange={e => setSubject(e.target.value)}
                     />
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Классное руководство (если есть)</label>
+                    <label className="form-label">Сынып жетекшілігі / Класс</label>
                     <input
                       type="text"
-                      placeholder="8 «В» класс"
+                      placeholder="6 «Ә» сыныбы"
                       value={classLeader}
                       onChange={e => setClassLeader(e.target.value)}
                     />
@@ -328,7 +327,7 @@ export default function StaffTab() {
                   marginTop: '0.5rem'
                 }}>
                   <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.6rem' }}>
-                    Создание логина и пароля для учителя:
+                    Мұғалімге арналған кіру логині мен құпия сөзі:
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
@@ -337,17 +336,17 @@ export default function StaffTab() {
                       <input
                         type="text"
                         required
-                        placeholder="vasilieva_es"
+                        placeholder="toleubaeva_zh"
                         value={login}
                         onChange={e => setLogin(e.target.value)}
                       />
                     </div>
 
                     <div>
-                      <label className="form-label">Пароль для первого входа</label>
+                      <label className="form-label">Құпия сөз / Пароль</label>
                       <input
                         type="text"
-                        placeholder="school2026"
+                        placeholder="school43kz"
                         value={passHint}
                         onChange={e => setPassHint(e.target.value)}
                       />
@@ -358,10 +357,10 @@ export default function StaffTab() {
 
               <div className="modal-footer">
                 <button type="button" className="btn-secondary" onClick={() => setShowAddModal(false)}>
-                  Отмена
+                  {t('btnCancel')}
                 </button>
                 <button type="submit" className="btn-primary">
-                  Сохранить и выдать доступ
+                  {t('btnSave')}
                 </button>
               </div>
             </form>

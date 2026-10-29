@@ -5,33 +5,35 @@ import {
   Clock, 
   AlertTriangle, 
   CalendarDays, 
-  FileText, 
   TrendingUp, 
   ArrowRight,
   PlusCircle,
-  FileCheck
+  FileCheck,
+  XCircle
 } from 'lucide-react';
 
 export default function DashboardTab({ onSelectTask, onOpenNewTask, setActiveTab }) {
-  const { tasks, meetings, currentUser, isDirector, isHeadTeacher } = useAuth();
+  const { tasks, meetings, currentUser, isDirector, isHeadTeacher, t, schoolInfo } = useAuth();
 
-  // Расчет статистики
-  const totalTasks = tasks.length;
-  const pendingReview = tasks.filter(t => t.status === 'submitted').length;
-  const completedTasks = tasks.filter(t => t.status === 'completed').length;
+  // Расчет статистики с исключением отмененных задач
+  const activeTasks = tasks.filter(t => t.status !== 'cancelled');
+  const totalTasks = activeTasks.length;
+  const pendingReview = activeTasks.filter(t => t.status === 'submitted').length;
+  const completedTasks = activeTasks.filter(t => t.status === 'completed').length;
   
   const todayStr = new Date().toISOString().split('T')[0];
-  const overdueTasks = tasks.filter(t => t.deadline < todayStr && t.status !== 'completed').length;
-  const urgentTasks = tasks.filter(t => t.priority === 'urgent' && t.status !== 'completed').length;
+  const overdueTasks = activeTasks.filter(t => t.deadline < todayStr && t.status !== 'completed').length;
+  const urgentTasks = activeTasks.filter(t => t.priority === 'urgent' && t.status !== 'completed').length;
 
   const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
-  // Мои задачи (для текущего пользователя)
-  const myTasks = tasks.filter(t => t.assignedToId === currentUser.id);
+  // Мои задачи
+  const myTasks = activeTasks.filter(t => t.assignedToId === currentUser?.id);
   const myPendingTasks = myTasks.filter(t => t.status !== 'completed');
 
   // Ближайшие встречи
   const upcomingMeetings = [...meetings]
+    .filter(m => m.status !== 'cancelled')
     .sort((a, b) => new Date(a.date) - new Date(b.date))
     .slice(0, 2);
 
@@ -39,7 +41,7 @@ export default function DashboardTab({ onSelectTask, onOpenNewTask, setActiveTab
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {/* Приветственный блок */}
       <div className="card" style={{
-        background: 'linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%)',
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)',
         color: '#ffffff',
         display: 'flex',
         alignItems: 'center',
@@ -52,14 +54,14 @@ export default function DashboardTab({ onSelectTask, onOpenNewTask, setActiveTab
           <div style={{ fontSize: '0.85rem', opacity: 0.85, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.3rem' }}>
             {new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </div>
-          <h2 style={{ fontSize: '1.6rem', fontWeight: 700, margin: 0, letterSpacing: '-0.01em' }}>
-            Здравствуйте, {currentUser.name}!
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0, letterSpacing: '-0.01em' }}>
+            {t('dashGreeting')}, {currentUser?.name}!
           </h2>
-          <p style={{ opacity: 0.9, marginTop: '0.35rem', fontSize: '0.95rem' }}>
+          <p style={{ opacity: 0.9, marginTop: '0.35rem', fontSize: '0.92rem' }}>
             {isDirector 
-              ? 'Контроль работы школы: 1 четверть. Проверьте сданные учителями отчеты и планёрки.'
+              ? `${schoolInfo.shortName}: Контроль работы школы и СОР/СОЧ. Проверьте сданные отчеты педагогов.`
               : isHeadTeacher
-              ? 'Координация учебного процесса и мониторинг исполнения поручений.'
+              ? 'Координация учебного процесса, Күнделік и мониторинг исполнения поручений.'
               : `У вас ${myPendingTasks.length} активных поручений на этой неделе.`}
           </p>
         </div>
@@ -69,18 +71,18 @@ export default function DashboardTab({ onSelectTask, onOpenNewTask, setActiveTab
             <button 
               className="btn-secondary" 
               onClick={onOpenNewTask}
-              style={{ backgroundColor: '#ffffff', color: 'var(--color-primary-dark)', fontWeight: 600 }}
+              style={{ backgroundColor: '#ffffff', color: '#1e3a8a', fontWeight: 600 }}
             >
               <PlusCircle size={18} />
-              Новое поручение
+              {t('btnNewTask')}
             </button>
           ) : (
             <button 
               className="btn-secondary" 
               onClick={() => setActiveTab('tasks')}
-              style={{ backgroundColor: '#ffffff', color: 'var(--color-primary-dark)', fontWeight: 600 }}
+              style={{ backgroundColor: '#ffffff', color: '#1e3a8a', fontWeight: 600 }}
             >
-              Мои дедлайны ({myPendingTasks.length})
+              {t('dashMyTasksTitle')} ({myPendingTasks.length})
             </button>
           )}
         </div>
@@ -92,7 +94,7 @@ export default function DashboardTab({ onSelectTask, onOpenNewTask, setActiveTab
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-                Сдано на проверку
+                {t('dashPendingReview')}
               </div>
               <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--color-warning)', marginTop: '0.2rem' }}>
                 {pendingReview}
@@ -103,7 +105,7 @@ export default function DashboardTab({ onSelectTask, onOpenNewTask, setActiveTab
             </div>
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.6rem' }}>
-            {pendingReview > 0 ? 'Требуется утверждение директором' : 'Все поступившие отчеты проверены'}
+            {pendingReview > 0 ? 'Требуется проверка дирекцией' : 'Все поступившие отчеты проверены'}
           </div>
         </div>
 
@@ -111,7 +113,7 @@ export default function DashboardTab({ onSelectTask, onOpenNewTask, setActiveTab
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-                Срочно / Просрочено
+                {t('dashUrgent')}
               </div>
               <div style={{ fontSize: '1.8rem', fontWeight: 700, color: overdueTasks > 0 ? 'var(--color-danger)' : 'var(--text-primary)', marginTop: '0.2rem' }}>
                 {overdueTasks + urgentTasks}
@@ -122,7 +124,7 @@ export default function DashboardTab({ onSelectTask, onOpenNewTask, setActiveTab
             </div>
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.6rem' }}>
-            Просрочено: {overdueTasks} • Срочных: {urgentTasks}
+            Мерзімі өткен: {overdueTasks} • Шұғыл: {urgentTasks}
           </div>
         </div>
 
@@ -130,7 +132,7 @@ export default function DashboardTab({ onSelectTask, onOpenNewTask, setActiveTab
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-                Всего поручений
+                {t('dashTotalTasks')}
               </div>
               <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--color-primary-light)', marginTop: '0.2rem' }}>
                 {totalTasks}
@@ -141,7 +143,7 @@ export default function DashboardTab({ onSelectTask, onOpenNewTask, setActiveTab
             </div>
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.6rem' }}>
-            Завершено {completedTasks} из {totalTasks}
+            Орындалды: {completedTasks} / {totalTasks}
           </div>
         </div>
 
@@ -149,7 +151,7 @@ export default function DashboardTab({ onSelectTask, onOpenNewTask, setActiveTab
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-                Исполнительская дисциплина
+                {t('dashDiscipline')}
               </div>
               <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--color-success)', marginTop: '0.2rem' }}>
                 {completionRate}%
@@ -177,25 +179,25 @@ export default function DashboardTab({ onSelectTask, onOpenNewTask, setActiveTab
         </div>
       </div>
 
-      {/* Две колонки: Задачи на контроле + Ближайшие планёрки */}
+      {/* Две колонки */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
         {/* Колонка 1: Актуальные поручения */}
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 600, margin: 0 }}>
-              {isDirector || isHeadTeacher ? 'Поручения на контроле' : 'Мои текущие задачи'}
+              {isDirector || isHeadTeacher ? t('dashActiveTasksTitle') : t('dashMyTasksTitle')}
             </h3>
             <button 
               className="btn-ghost btn-sm" 
               onClick={() => setActiveTab('tasks')}
               style={{ color: 'var(--color-primary-light)' }}
             >
-              Все поручения <ArrowRight size={14} />
+              {t('dashAllTasksBtn')} <ArrowRight size={14} />
             </button>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-            {(isDirector || isHeadTeacher ? tasks : myTasks).slice(0, 4).map(task => {
+            {(isDirector || isHeadTeacher ? activeTasks : myTasks).slice(0, 4).map(task => {
               const isOverdue = task.deadline < todayStr && task.status !== 'completed';
               return (
                 <div 
@@ -223,11 +225,11 @@ export default function DashboardTab({ onSelectTask, onOpenNewTask, setActiveTab
                   </div>
 
                   <div style={{ flexShrink: 0 }}>
-                    {task.status === 'completed' && <span className="badge badge-success">Принято</span>}
-                    {task.status === 'submitted' && <span className="badge badge-warning">На проверке</span>}
-                    {task.status === 'in_progress' && <span className="badge badge-primary">В работе</span>}
-                    {task.status === 'todo' && <span className="badge badge-neutral">Новое</span>}
-                    {task.status === 'revision' && <span className="badge badge-danger">Доработка</span>}
+                    {task.status === 'completed' && <span className="badge badge-success">{t('statusCompleted')}</span>}
+                    {task.status === 'submitted' && <span className="badge badge-warning">{t('statusSubmitted')}</span>}
+                    {task.status === 'in_progress' && <span className="badge badge-primary">{t('statusInProgress')}</span>}
+                    {task.status === 'todo' && <span className="badge badge-neutral">{t('statusTodo')}</span>}
+                    {task.status === 'revision' && <span className="badge badge-danger">{t('statusRevision')}</span>}
                   </div>
                 </div>
               );
@@ -235,18 +237,18 @@ export default function DashboardTab({ onSelectTask, onOpenNewTask, setActiveTab
           </div>
         </div>
 
-        {/* Колонка 2: Ближайшие планёрки и совещания */}
+        {/* Колонка 2: Планёрки и совещания */}
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 600, margin: 0 }}>
-              Планёрки и совещания
+              {t('dashMeetingsTitle')}
             </h3>
             <button 
               className="btn-ghost btn-sm" 
               onClick={() => setActiveTab('planner')}
               style={{ color: 'var(--color-primary-light)' }}
             >
-              Расписание <ArrowRight size={14} />
+              {t('dashAllMeetingsBtn')} <ArrowRight size={14} />
             </button>
           </div>
 
@@ -257,7 +259,7 @@ export default function DashboardTab({ onSelectTask, onOpenNewTask, setActiveTab
                 borderRadius: 'var(--radius-sm)',
                 border: '1px solid var(--border-subtle)',
                 backgroundColor: 'var(--bg-surface-subtle)',
-                borderLeft: '4px solid var(--color-primary)'
+                borderLeft: '4px solid #0284c7'
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
                   <span className="badge badge-primary" style={{ fontSize: '0.7rem' }}>
@@ -273,11 +275,11 @@ export default function DashboardTab({ onSelectTask, onOpenNewTask, setActiveTab
                 </div>
 
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                  📍 {meet.location} • Руководитель: {meet.leader}
+                  📍 {meet.location} • Төраға: {meet.leader}
                 </div>
 
                 <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--border-subtle)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  Повестка: {meet.agenda.slice(0, 2).join('; ')}...
+                  Күн тәртібі: {meet.agenda.slice(0, 2).join('; ')}...
                 </div>
               </div>
             ))}

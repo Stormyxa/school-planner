@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
+import LoginScreen from './components/LoginScreen';
 import DashboardTab from './pages/DashboardTab';
 import PlannerTab from './pages/PlannerTab';
 import TasksTab from './pages/TasksTab';
@@ -14,6 +15,7 @@ import SubmitReportModal from './components/SubmitReportModal';
 import TaskDetailModal from './components/TaskDetailModal';
 
 function AppContent() {
+  const { currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   
   // Состояния модальных окон
@@ -21,6 +23,11 @@ function AppContent() {
   const [isNewMeetingOpen, setIsNewMeetingOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [taskToSubmit, setTaskToSubmit] = useState(null);
+
+  // Если пользователь не вошел — показываем экран авторизации
+  if (!currentUser) {
+    return <LoginScreen />;
+  }
 
   const handleOpenTaskDetail = (task) => {
     setSelectedTask(task);

@@ -10,18 +10,26 @@ import {
   RotateCcw, 
   Clock, 
   Tag, 
-  AlertTriangle 
+  AlertTriangle,
+  XCircle
 } from 'lucide-react';
 
 export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitReport }) {
-  const { currentUser, isDirector, isHeadTeacher, updateTaskStatus } = useAuth();
+  const { currentUser, isDirector, isHeadTeacher, updateTaskStatus, cancelTask, t } = useAuth();
+  
   const [reviewNote, setReviewNote] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
+  
+  // Отмена поручения постановщиком
+  const [showCancelPrompt, setShowCancelPrompt] = useState(false);
+  const [cancelReasonInput, setCancelReasonInput] = useState('');
 
   if (!isOpen || !task) return null;
 
-  const isAssignedToMe = task.assignedToId === currentUser.id;
+  const isAssignedToMe = task.assignedToId === currentUser?.id;
+  const isCreatedByMe = task.createdById === currentUser?.id;
   const canReview = isDirector || isHeadTeacher;
+  const canCancel = isDirector || isCreatedByMe;
 
   const handleAccept = () => {
     updateTaskStatus(task.id, 'completed', {
@@ -42,18 +50,27 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
     onClose();
   };
 
+  const handleConfirmCancel = () => {
+    const reason = cancelReasonInput.trim() || 'Снято с контроля решением администрации';
+    cancelTask(task.id, reason);
+    setShowCancelPrompt(false);
+    onClose();
+  };
+
   const getStatusBadge = (status) => {
     switch (status) {
       case 'completed':
-        return <span className="badge badge-success"><CheckCircle2 size={13} /> Принято дирекцией</span>;
+        return <span className="badge badge-success"><CheckCircle2 size={13} /> {t('statusCompleted')}</span>;
       case 'submitted':
-        return <span className="badge badge-warning"><Clock size={13} /> Сдано на проверку</span>;
+        return <span className="badge badge-warning"><Clock size={13} /> {t('statusSubmitted')}</span>;
       case 'revision':
-        return <span className="badge badge-danger"><RotateCcw size={13} /> На доработке</span>;
+        return <span className="badge badge-danger"><RotateCcw size={13} /> {t('statusRevision')}</span>;
+      case 'cancelled':
+        return <span className="badge badge-neutral" style={{ backgroundColor: '#f1f5f9', color: '#64748b' }}><XCircle size={13} /> {t('statusCancelled')}</span>;
       case 'in_progress':
-        return <span className="badge badge-primary">В работе</span>;
+        return <span className="badge badge-primary">{t('statusInProgress')}</span>;
       default:
-        return <span className="badge badge-neutral">К исполнению</span>;
+        return <span className="badge badge-neutral">{t('statusTodo')}</span>;
     }
   };
 
@@ -73,7 +90,33 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
         </div>
 
         <div className="modal-body">
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.75rem', lineHeight: 1.3 }}>
+          {/* Баннер, если поручение отменено */}
+          {task.status === 'cancelled' && (
+            <div style={{
+              padding: '0.85rem 1rem',
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'var(--bg-surface-subtle)',
+              borderLeft: '4px solid var(--text-muted)',
+              marginBottom: '1.25rem',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '0.6rem'
+            }}>
+              <XCircle size={18} color="var(--text-muted)" style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div>
+                <div style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
+                  {t('taskCancelledNotice')}
+                </div>
+                {task.cancelReason && (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                    {t('cancellationReason')}: <em>«{task.cancelReason}»</em>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.75rem', lineHeight: 1.3, textDecoration: task.status === 'cancelled' ? 'line-through' : 'none' }}>
             {task.title}
           </h2>
 
@@ -147,7 +190,7 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
                   style={{ textDecoration: 'none' }}
                 >
                   <Download size={15} />
-                  Скачать
+                  {t('btnDownload')}
                 </a>
               </div>
 
@@ -157,7 +200,7 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
                 </div>
               )}
             </div>
-          ) : task.requiresFile ? (
+          ) : task.requiresFile && task.status !== 'cancelled' ? (
             <div style={{
               padding: '0.75rem 1rem',
               borderRadius: 'var(--radius-sm)',
@@ -174,7 +217,7 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
             </div>
           ) : null}
 
-          {/* Причина доработки, если была */}
+          {/* Замечание директора, если возвращали на доработку */}
           {task.reviewComment && (
             <div style={{
               padding: '0.75rem 1rem',
@@ -188,13 +231,45 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
             </div>
           )}
 
-          {/* Поле ввода для возврата на доработку */}
+          {/* Форма подтверждения отмены поручения */}
+          {showCancelPrompt && (
+            <div style={{
+              marginTop: '1rem',
+              padding: '1rem',
+              backgroundColor: 'var(--bg-surface-subtle)',
+              border: '1px solid var(--border-strong)',
+              borderRadius: 'var(--radius-sm)',
+              animation: 'fadeIn 0.2s ease-out'
+            }}>
+              <label className="form-label" style={{ fontWeight: 600, color: 'var(--color-danger)' }}>
+                {t('cancelReasonLabel')}
+              </label>
+              <textarea
+                rows={2}
+                placeholder={t('cancelReasonPlaceholder')}
+                value={cancelReasonInput}
+                onChange={e => setCancelReasonInput(e.target.value)}
+                autoFocus
+              />
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem' }}>
+                <button className="btn-danger btn-sm" onClick={handleConfirmCancel}>
+                  <XCircle size={14} />
+                  {t('btnConfirmCancel')}
+                </button>
+                <button className="btn-secondary btn-sm" onClick={() => setShowCancelPrompt(false)}>
+                  {t('btnCancel')}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Форма отправки на доработку */}
           {showRejectInput && (
             <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: 'var(--bg-surface-subtle)', borderRadius: 'var(--radius-sm)' }}>
               <label className="form-label">Укажите, что именно нужно исправить или дополнить:</label>
               <textarea
                 rows={2}
-                placeholder="Например: Не заполнены данные по 9 «Б» классу, скорректируйте..."
+                placeholder="Не заполнены графы СОЧ, скорректируйте..."
                 value={reviewNote}
                 onChange={e => setReviewNote(e.target.value)}
                 autoFocus
@@ -211,9 +286,10 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
           )}
         </div>
 
-        <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
-          <div>
-            {isAssignedToMe && task.status !== 'completed' && (
+        <div className="modal-footer" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {/* Кнопка сдачи отчета учителем */}
+            {isAssignedToMe && task.status !== 'completed' && task.status !== 'cancelled' && (
               <button 
                 className="btn-primary" 
                 onClick={() => {
@@ -222,7 +298,21 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
                 }}
               >
                 <FileText size={16} />
-                {task.submittedFile ? 'Заменить сданный отчет' : 'Сдать отчет по задаче'}
+                {task.submittedFile ? 'Заменить сданный отчет' : t('btnSubmitReport')}
+              </button>
+            )}
+
+            {/* КНОПКА ОТМЕНЫ ПОРУЧЕНИЯ ПОСТАНОВЩИКОМ / ДИРЕКТОРОМ */}
+            {canCancel && task.status !== 'completed' && task.status !== 'cancelled' && !showCancelPrompt && (
+              <button
+                type="button"
+                className="btn-ghost btn-sm"
+                style={{ color: 'var(--color-danger)', border: '1px solid var(--border-subtle)' }}
+                onClick={() => setShowCancelPrompt(true)}
+                title="Отменить задачу (исполнитель получит уведомление об отмене)"
+              >
+                <XCircle size={15} />
+                {t('btnCancelTask')}
               </button>
             )}
           </div>
@@ -236,16 +326,16 @@ export default function TaskDetailModal({ isOpen, onClose, task, onOpenSubmitRep
                   onClick={() => setShowRejectInput(true)}
                 >
                   <RotateCcw size={16} />
-                  На доработку
+                  {t('btnRejectReport')}
                 </button>
                 <button className="btn-success" onClick={handleAccept}>
                   <CheckCircle2 size={16} />
-                  Принять отчет
+                  {t('btnAcceptReport')}
                 </button>
               </>
             )}
             <button className="btn-secondary" onClick={onClose}>
-              Закрыть
+              {t('btnClose')}
             </button>
           </div>
         </div>

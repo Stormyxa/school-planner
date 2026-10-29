@@ -7,9 +7,7 @@ import {
   CheckCircle2, 
   Clock, 
   AlertCircle, 
-  ExternalLink, 
   Search, 
-  Filter,
   Upload
 } from 'lucide-react';
 
@@ -21,16 +19,16 @@ const GithubIcon = ({ size = 18, color = 'currentColor' }) => (
 );
 
 export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
-  const { staff, tasks, currentUser, isDirector, isHeadTeacher } = useAuth();
+  const { staff, tasks, currentUser, isDirector, isHeadTeacher, t, schoolInfo } = useAuth();
 
-  const [activeSubTab, setActiveSubTab] = useState('matrix'); // 'matrix' | 'archive'
+  const [activeSubTab, setActiveSubTab] = useState('matrix');
   const [selectedQuarter, setSelectedQuarter] = useState('q1');
   const [searchDoc, setSearchDoc] = useState('');
 
-  // Список задач, требующих файл
-  const fileTasks = tasks.filter(t => t.requiresFile);
+  // Список активных задач, требующих файл (исключая отмененные)
+  const fileTasks = tasks.filter(t => t.requiresFile && t.status !== 'cancelled');
 
-  // Список всех загруженных файлов
+  // Список загруженных файлов
   const uploadedFiles = tasks
     .filter(t => t.submittedFile)
     .map(t => ({
@@ -53,7 +51,7 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      {/* Шапка с индикатором GitHub Storage */}
+      {/* Шапка */}
       <div className="card" style={{
         display: 'flex',
         alignItems: 'center',
@@ -77,15 +75,15 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
           </div>
           <div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>
-              Сбор отчетов и Файловый архив
+              {t('navDocs')} • {schoolInfo.shortName}
             </h2>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Контроль сдачи обязательной школьной документации учителями
+              СОР/СОЧ графиктері, есептер мен құжаттар мұрағаты
             </div>
           </div>
         </div>
 
-        {/* Индикатор экономии лимитов Supabase -> GitHub */}
+        {/* Индикатор GitHub Storage */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -102,7 +100,7 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
               GitHub Repo Storage
             </div>
             <div style={{ color: 'var(--color-success)', fontWeight: 500 }}>
-              ● Безлимитное хранение (экономия квоты Supabase)
+              ● {t('docsStorageNotice')}
             </div>
           </div>
         </div>
@@ -129,7 +127,7 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
               boxShadow: activeSubTab === 'matrix' ? 'var(--shadow-sm)' : 'none'
             }}
           >
-            📋 Матрица сдачи по учителям
+            {t('docsMatrixTab')}
           </button>
           <button
             onClick={() => setActiveSubTab('archive')}
@@ -143,7 +141,7 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
               boxShadow: activeSubTab === 'archive' ? 'var(--shadow-sm)' : 'none'
             }}
           >
-            📁 Архив всех файлов ({uploadedFiles.length})
+            {t('docsArchiveTab')} ({uploadedFiles.length})
           </button>
         </div>
 
@@ -153,24 +151,24 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
             onChange={e => setSelectedQuarter(e.target.value)}
             style={{ width: 'auto', fontSize: '0.85rem' }}
           >
-            <option value="q1">1 четверть (Текущая)</option>
-            <option value="q2">2 четверть</option>
-            <option value="q3">3 четверть</option>
-            <option value="q4">4 четверть</option>
-            <option value="all">Весь 2026/2027 год</option>
+            <option value="q1">1 тоқсан (1 четверть)</option>
+            <option value="q2">2 тоқсан (2 четверть)</option>
+            <option value="q3">3 тоқсан (3 четверть)</option>
+            <option value="q4">4 тоқсан (4 четверть)</option>
+            <option value="all">2026/2027 оқу жылы</option>
           </select>
         </div>
       </div>
 
-      {/* ВИД 1: МАТРИЦА СДАЧИ ОТЧЕТОВ */}
+      {/* ВИД 1: МАТРИЦА СДАЧИ */}
       {activeSubTab === 'matrix' && (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border-subtle)' }}>
             <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: 0 }}>
-              Сводная ведомость: кто из учителей сдал отчеты
+              Жиынтық ведомость: СОР/СОЧ есептерін тапсыру бақылауы
             </h3>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.2rem 0 0 0' }}>
-              Нажмите на файл для мгновенного скачивания или проверки директором
+              Файлды ашу немесе жүктеп алу үшін құжатты басыңыз
             </p>
           </div>
 
@@ -178,8 +176,8 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
               <thead>
                 <tr style={{ backgroundColor: 'var(--bg-surface-subtle)', borderBottom: '1px solid var(--border-subtle)' }}>
-                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Педагог / Должность</th>
-                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>Предмет / Класс</th>
+                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{t('docsTeacherCol')}</th>
+                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{t('docsSubjectCol')}</th>
                   {fileTasks.slice(0, 3).map(task => (
                     <th key={task.id} style={{ padding: '0.75rem 1rem', fontWeight: 600, maxWidth: '180px' }}>
                       <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -190,12 +188,12 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
                       </div>
                     </th>
                   ))}
-                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600, textAlign: 'center' }}>Статус</th>
+                  <th style={{ padding: '0.75rem 1rem', fontWeight: 600, textAlign: 'center' }}>{t('docsStatusCol')}</th>
                 </tr>
               </thead>
               <tbody>
                 {teachersOnly.map(teacher => {
-                  const teacherTasks = tasks.filter(t => t.assignedToId === teacher.id && t.requiresFile);
+                  const teacherTasks = tasks.filter(t => t.assignedToId === teacher.id && t.requiresFile && t.status !== 'cancelled');
                   const hasSubmittedAll = teacherTasks.length > 0 && teacherTasks.every(t => t.submittedFile);
 
                   return (
@@ -262,7 +260,7 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
                               fontWeight: 500
                             }}>
                               <AlertCircle size={13} />
-                              Не сдан
+                              {t('docsNotSubmitted')}
                             </span>
                           </td>
                         );
@@ -270,9 +268,9 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
 
                       <td style={{ padding: '0.85rem 1rem', textAlign: 'center' }}>
                         {hasSubmittedAll ? (
-                          <span className="badge badge-success">Всё сдано</span>
+                          <span className="badge badge-success">{t('docsAllSubmitted')}</span>
                         ) : (
-                          <span className="badge badge-warning">В процессе</span>
+                          <span className="badge badge-warning">{t('docsInProgress')}</span>
                         )}
                       </td>
                     </tr>
@@ -284,16 +282,15 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
         </div>
       )}
 
-      {/* ВИД 2: ФАЙЛОВЫЙ АРХИВ ШКОЛЫ */}
+      {/* ВИД 2: АРХИВ */}
       {activeSubTab === 'archive' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          {/* Поиск файла */}
           <div style={{ display: 'flex', gap: '0.5rem', maxWidth: '350px' }}>
             <div style={{ position: 'relative', width: '100%' }}>
               <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
               <input
                 type="text"
-                placeholder="Поиск по названию файла или автору..."
+                placeholder="Іздеу / Поиск файла..."
                 value={searchDoc}
                 onChange={e => setSearchDoc(e.target.value)}
                 style={{ paddingLeft: '2.1rem', fontSize: '0.85rem' }}
@@ -305,10 +302,7 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
             {uploadedFiles.length === 0 ? (
               <div className="card" style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '3rem 1rem' }}>
                 <FolderDown size={36} color="var(--text-muted)" style={{ margin: '0 auto 0.5rem auto' }} />
-                <h4>Файлов в архиве пока нет</h4>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
-                  Когда учителя прикрепят отчеты к задачам, они появятся в этом репозитории.
-                </p>
+                <h4>Мұрағат бос / Файлов в архиве пока нет</h4>
               </div>
             ) : (
               uploadedFiles.map((item, idx) => (
@@ -316,7 +310,7 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                       <span className="badge badge-primary" style={{ fontSize: '0.7rem' }}>
-                        {item.category || 'Документ'}
+                        {item.category || 'Құжат'}
                       </span>
                       <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                         {item.file.size}
@@ -330,10 +324,10 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
                           {item.file.name}
                         </div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-                          Автор: <strong>{item.teacherName}</strong>
+                          Педагог: <strong>{item.teacherName}</strong>
                         </div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
-                          К задаче: {item.taskTitle}
+                          Тапсырма: {item.taskTitle}
                         </div>
                       </div>
                     </div>
@@ -360,7 +354,7 @@ export default function DocumentsTab({ onOpenSubmitReport, onSelectTask }) {
                       style={{ textDecoration: 'none' }}
                     >
                       <Download size={14} />
-                      Скачать
+                      {t('btnDownload')}
                     </a>
                   </div>
                 </div>

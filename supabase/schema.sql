@@ -1,7 +1,8 @@
 -- ==========================================================================
--- СХЕМА БАЗЫ ДАННЫХ SUPABASE: ШКОЛЬНАЯ ПЛАНЁРКА (SCHOOL PLANNER)
+-- СХЕМА БАЗЫ ДАННЫХ SUPABASE: КГУ «СШ № 43» (SCHOOL PLANNER)
 -- ==========================================================================
--- Скопируйте и выполните этот скрипт в разделе SQL Editor панели Supabase
+-- Выполните этот скрипт в разделе SQL Editor в панели Supabase.
+-- Он обновит существующие таблицы и создаст учетную запись Директора.
 
 -- 1. Таблица профилей и сотрудников
 CREATE TABLE IF NOT EXISTS public.profiles (
@@ -15,8 +16,12 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   class_leader TEXT,
   phone TEXT,
   login TEXT UNIQUE NOT NULL,
+  password_hash TEXT DEFAULT 'school43kz',
   avatar TEXT
 );
+
+-- Добавляем колонку password_hash если таблица уже существовала
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS password_hash TEXT DEFAULT 'school43kz';
 
 -- 2. Таблица поручений и задач
 CREATE TABLE IF NOT EXISTS public.tasks (
@@ -30,16 +35,26 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   created_by_name TEXT NOT NULL,
   priority TEXT NOT NULL DEFAULT 'normal' CHECK (priority IN ('normal', 'high', 'urgent')),
   deadline DATE NOT NULL,
-  status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'in_progress', 'submitted', 'completed', 'revision')),
+  status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'in_progress', 'submitted', 'completed', 'revision', 'cancelled')),
+  cancel_reason TEXT,
   requires_file BOOLEAN DEFAULT false,
   category TEXT DEFAULT 'Отчетность',
   teacher_comment TEXT,
   review_comment TEXT,
+  submitted_file TEXT,
   submitted_at TIMESTAMPTZ,
   reviewed_at TIMESTAMPTZ
 );
 
--- 3. Таблица загруженных файлов (сохраненных в GitHub / облаке)
+-- Обновляем ограничение статусов tasks если таблица уже создана
+ALTER TABLE public.tasks DROP CONSTRAINT IF EXISTS tasks_status_check;
+ALTER TABLE public.tasks ADD CONSTRAINT tasks_status_check 
+  CHECK (status IN ('todo', 'in_progress', 'submitted', 'completed', 'revision', 'cancelled'));
+
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS cancel_reason TEXT;
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS submitted_file TEXT;
+
+-- 3. Таблица загруженных файлов (GitHub Storage)
 CREATE TABLE IF NOT EXISTS public.task_files (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at TIMESTAMPTZ DEFAULT now(),
@@ -77,7 +92,7 @@ CREATE TABLE IF NOT EXISTS public.notifications (
   is_read BOOLEAN DEFAULT false
 );
 
--- Индексы для быстрого поиска
+-- Индексы
 CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON public.tasks(assigned_to_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_deadline ON public.tasks(deadline);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON public.tasks(status);
@@ -91,10 +106,50 @@ ALTER TABLE public.task_files ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.meetings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
--- Публичные политики для школьного портала (чтение и запись авторизованными пользователями)
+-- Политики доступа
+DROP POLICY IF EXISTS "Разрешить чтение всем сотрудникам" ON public.profiles;
+DROP POLICY IF EXISTS "Разрешить добавление сотрудников" ON public.profiles;
+DROP POLICY IF EXISTS "Разрешить чтение поручений всем сотрудникам" ON public.tasks;
+DROP POLICY IF EXISTS "Разрешить обновление поручений" ON public.tasks;
+DROP POLICY IF EXISTS "Разрешить работу с файлами" ON public.task_files;
+DROP POLICY IF EXISTS "Разрешить чтение планёрок" ON public.meetings;
+DROP POLICY IF EXISTS "Разрешить работу с уведомлениями" ON public.notifications;
+
 CREATE POLICY "Разрешить чтение всем сотрудникам" ON public.profiles FOR SELECT USING (true);
+CREATE POLICY "Разрешить добавление сотрудников" ON public.profiles FOR ALL USING (true);
 CREATE POLICY "Разрешить чтение поручений всем сотрудникам" ON public.tasks FOR SELECT USING (true);
 CREATE POLICY "Разрешить обновление поручений" ON public.tasks FOR ALL USING (true);
 CREATE POLICY "Разрешить работу с файлами" ON public.task_files FOR ALL USING (true);
 CREATE POLICY "Разрешить чтение планёрок" ON public.meetings FOR ALL USING (true);
 CREATE POLICY "Разрешить работу с уведомлениями" ON public.notifications FOR ALL USING (true);
+
+-- ==========================================================================
+-- СОЗДАНИЕ ГЛАВНОГО АККАУНТА ДИРЕКТОРА КГУ «СШ № 43»
+-- ==========================================================================
+-- Логин: director43
+-- Пароль: school43kz (директор сможет изменить его при желании)
+
+INSERT INTO public.profiles (
+  email,
+  full_name,
+  role,
+  role_title,
+  subject,
+  phone,
+  login,
+  password_hash,
+  avatar
+) VALUES (
+  'director.sch43@edu.kz',
+  'Омарова Гульнара Бауржановна',
+  'director',
+  'Директор школы / Мектеп басшысы',
+  'Менеджмент в образовании',
+  '+7 (777) 123-45-01',
+  'director43',
+  'school43kz',
+  'ГО'
+) ON CONFLICT (login) DO UPDATE SET 
+  full_name = EXCLUDED.full_name,
+  role = EXCLUDED.role,
+  password_hash = EXCLUDED.password_hash;
