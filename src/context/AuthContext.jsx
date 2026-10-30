@@ -86,7 +86,17 @@ export function AuthProvider({ children }) {
   // Всплывающий живой тост (In-App Toast)
   const [toast, setToast] = useState(null);
 
+  // Проверка, включены ли уведомления (для Tauri)
+  const areNotificationsEnabled = useCallback(() => {
+    if (window.__TAURI__) {
+      const saved = localStorage.getItem('sp_notifications_enabled');
+      return saved !== 'false';
+    }
+    return true;
+  }, []);
+
   const showToast = useCallback((title, message, type = 'task', taskId = null) => {
+    if (!areNotificationsEnabled()) return;
     setToast({
       id: `toast-${Date.now()}`,
       title,
@@ -94,7 +104,7 @@ export function AuthProvider({ children }) {
       type,
       taskId
     });
-  }, []);
+  }, [areNotificationsEnabled]);
 
   const dismissToast = useCallback(() => {
     setToast(null);

@@ -58,7 +58,7 @@ export default function SettingsTab() {
         setNotificationsEnabled(prev => !prev);
       });
       return () => {
-        unlisten.then(fn => fn());
+        unlisten.then(fn => fn()).catch(() => {});
       };
     }
   }, []);
@@ -320,8 +320,44 @@ export default function SettingsTab() {
             </div>
           </div>
 
-          {/* Статус регистрации этого устройства */}
-          {pushStatus === 'granted' && (
+          {/* Диагностика Service Worker (скрываем в Tauri) */}
+          {!isTauri && (
+            <div style={{
+              padding: '0.6rem 0.8rem',
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'var(--bg-surface-subtle)',
+              fontSize: '0.78rem',
+              marginBottom: '0.75rem'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
+                {('serviceWorker' in navigator) ? (
+                  <CheckCircle2 size={14} color="#059669" />
+                ) : (
+                  <AlertCircle size={14} color="#dc2626" />
+                )}
+                <span>Service Worker: {('serviceWorker' in navigator) ? 'Поддерживается' : 'Не поддерживается'}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
+                {('PushManager' in window) ? (
+                  <CheckCircle2 size={14} color="#059669" />
+                ) : (
+                  <AlertCircle size={14} color="#dc2626" />
+                )}
+                <span>Web Push: {('PushManager' in window) ? 'Поддерживается' : 'Не поддерживается'}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                {pushStatus === 'granted' ? (
+                  <CheckCircle2 size={14} color="#059669" />
+                ) : (
+                  <AlertCircle size={14} color="#dc2626" />
+                )}
+                <span>Разрешение: {pushStatus === 'granted' ? 'Разрешено' : pushStatus === 'denied' ? 'Отклонено' : 'Не запрошено'}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Статус регистрации этого устройства (скрываем в Tauri) */}
+          {!isTauri && pushStatus === 'granted' && (
             <div style={{
               padding: '0.6rem 0.8rem',
               borderRadius: 'var(--radius-sm)',
