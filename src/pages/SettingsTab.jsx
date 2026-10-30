@@ -16,6 +16,9 @@ import {
   Wifi
 } from 'lucide-react';
 
+// Проверка, запущено ли приложение в Tauri
+const isTauri = window.__TAURI__ !== undefined;
+
 const GithubIcon = ({ size = 18, color = 'currentColor' }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4" />
@@ -35,9 +38,33 @@ export default function SettingsTab() {
   const [testingDb, setTestingDb] = useState(false);
   const [dbTestResult, setDbTestResult] = useState(null);
 
+  // Состояние уведомлений (для Tauri desktop app)
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
+    const saved = localStorage.getItem('sp_notifications_enabled');
+    return saved !== 'false'; // По умолчанию включены
+  });
+
   const isSupaActive = isSupabaseConfigured();
 
+  // Сохранение состояния уведомлений
+  useEffect(() => {
+    localStorage.setItem('sp_notifications_enabled', notificationsEnabled.toString());
+  }, [notificationsEnabled]);
+
+  // Обработка события из Tauri tray menu
+  useEffect(() => {
+    if (isTauri && window.__TAURI__) {
+      const unlisten = window.__TAURI__.event.listen('toggle-notifications', () => {
+        setNotificationsEnabled(prev => !prev);
+      });
+      return () => {
+        unlisten.then(fn => fn());
+      };
+    }
+  }, []);
+
   // ─── АВТОМАТИЧЕСКАЯ РЕГИСТРАЦИЯ ПРИ ОТКРЫТИИ НАСТРОЕК ──────────────────────
+  // В Tauri Desktop App уведомления всегда включены (приложение в трее)
   // Запускаем при каждом открытии SettingsTab чтобы убедиться что ЭТОТ браузер зарегистрирован
   useEffect(() => {
     let isMounted = true;
@@ -54,8 +81,8 @@ export default function SettingsTab() {
         }
       } catch { /* ignore */ }
 
-      // 2. Если разрешение уже выдано — тихо перерегистрировать токен устройства
-      if (Notification.permission === 'granted' && currentUser) {
+      // 2. В desktop app (Tauri) всегда тихо регистрируем токен устройства без запроса разрешения
+      if (currentUser) {
         setRegistering(true);
         try {
           const sub = await NotificationService.subscribePush(currentUser);
@@ -276,7 +303,16 @@ export default function SettingsTab() {
             </div>
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
               {registering && <Loader2 size={14} className="pulse" style={{ color: 'var(--color-primary)' }} />}
-              {pushStatus === 'granted' ? (
+              {isTauri ? (
+                <button
+                  onClick={() => setNotificationsEnabled(!notificationsEnabled)}
+                  className="btn-secondary btn-sm"
+                  style={{ gap: '0.4rem', color: notificationsEnabled ? '#059669' : '#64748b' }}
+                >
+                  <Bell size={14} />
+                  {notificationsEnabled ? 'Включены' : 'Отключены'}
+                </button>
+              ) : pushStatus === 'granted' ? (
                 <span className="badge badge-success"><CheckCircle2 size={12} /> Разрешено</span>
               ) : (
                 <span className="badge badge-neutral">Не включено</span>
@@ -319,60 +355,46 @@ export default function SettingsTab() {
           )}
 
           <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-            Настоящие фоновые пуши по протоколу W3C Web Push (FCM / APNs). Доставляются на экран блокировки смартфона или ПК даже при закрытом приложении.
+            В Desktop App уведомления всегда включены (приложение в системном трее). Токен устройства автоматически регистрируется для получения push-уведомлений.
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '1rem' }}>
-            {pushStatus !== 'granted' ? (
-              <button 
-                className="btn-primary btn-sm"
-                onClick={handleRequestPush}
-                disabled={registering}
-                style={{ width: '100%', justifyContent: 'center' }}
-              >
-                <Bell size={15} />
-                Включить фоновые Web Push уведомления
-              </button>
-            ) : (
-              <>
-                <button 
-                  className="btn-secondary btn-sm"
-                  onClick={handleReRegister}
-                  disabled={registering}
-                  style={{ width: '100%', justifyContent: 'center' }}
-                >
-                  {registering ? <Loader2 size={14} className="pulse" /> : <RefreshCw size={13} />}
-                  {registering ? 'Регистрация...' : 'Перерегистрировать это устройство'}
-                </button>
+            <button 
+              className="btn-secondary btn-sm"
+              onClick={handleReRegister}
+              disabled={registering}
+              style={{ width: '100%', justifyContent: 'center' }}
+            >
+              {registering ? <Loader2 size={14} className="pulse" /> : <RefreshCw size={13} />}
+              {registering ? 'Регистрация...' : 'Перерегистрировать это устройство'}
+            </button>
 
-                <button 
-                  className="btn-ghost btn-sm"
-                  onClick={async () => {
-                    setTestingPush(true);
-                    setPushTestResult(null);
-                    showToast?.('Тест Web Push', 'Через 3 сек придёт пуш — заблокируйте экран!', 'task');
-                    if (currentUser) await NotificationService.subscribePush(currentUser);
-                    try {
-                      const res = await NotificationService.sendTestWebPush(currentUser, 3);
-                      if (res && res.sent > 0) {
-                        setPushTestResult({ success: true, message: `FCM принял пуш (устройств: ${res.sent}). Если на экране блокировки НЕ появился — читай инструкцию ниже.` });
-                      } else {
-                        setPushTestResult({ success: false, message: `Пуш не принят FCM: ${res?.reason || res?.error || 'устройство не зарегистрировано'}` });
-                      }
-                    } catch (e) {
-                      setPushTestResult({ success: false, message: e.message });
-                    } finally {
-                      setTestingPush(false);
-                    }
-                  }}
-                  disabled={testingPush}
-                  style={{ width: '100%', justifyContent: 'center', fontSize: '0.78rem' }}
-                >
-                  {testingPush ? <Loader2 size={14} className="pulse" /> : <Bell size={13} />}
-                  {testingPush ? 'Отправка через 3с (заблокируй экран)...' : 'Тест фонового пуша (заблокируй экран)'}
-                </button>
-              </>
-            )}
+            <button 
+              className="btn-ghost btn-sm"
+              onClick={async () => {
+                setTestingPush(true);
+                setPushTestResult(null);
+                showToast?.('Тест Web Push', 'Через 3 сек придёт пуш — заблокируйте экран!', 'task');
+                if (currentUser) await NotificationService.subscribePush(currentUser);
+                try {
+                  const res = await NotificationService.sendTestWebPush(currentUser, 3);
+                  if (res && res.sent > 0) {
+                    setPushTestResult({ success: true, message: `FCM принял пуш (устройств: ${res.sent}). Если на экране блокировки НЕ появился — читай инструкцию ниже.` });
+                  } else {
+                    setPushTestResult({ success: false, message: `Пуш не принят FCM: ${res?.reason || res?.error || 'устройство не зарегистрировано'}` });
+                  }
+                } catch (e) {
+                  setPushTestResult({ success: false, message: e.message });
+                } finally {
+                  setTestingPush(false);
+                }
+              }}
+              disabled={testingPush}
+              style={{ width: '100%', justifyContent: 'center', fontSize: '0.78rem' }}
+            >
+              {testingPush ? <Loader2 size={14} className="pulse" /> : <Bell size={13} />}
+              {testingPush ? 'Отправка через 3с (заблокируй экран)...' : 'Тест фонового пуша (заблокируй экран)'}
+            </button>
 
             {pushTestResult && (
               <div style={{

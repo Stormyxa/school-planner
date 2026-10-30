@@ -416,41 +416,6 @@ export default function Header() {
         </div>
       </header>
 
-      {/* БАННЕР ПРЕДЛОЖЕНИЯ ВКЛЮЧИТЬ УВЕДОМЛЕНИЯ (ПОДДЕРЖИВАЕТ И СВЕТЛУЮ, И ТЁМНУЮ ТЕМУ) */}
-      {pushStatus !== 'granted' && (
-        <div style={{
-          backgroundColor: 'var(--color-primary-bg)',
-          borderBottom: '1px solid var(--border-subtle)',
-          padding: '0.55rem 1rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '0.75rem',
-          flexWrap: 'wrap',
-          boxSizing: 'border-box',
-          width: '100%',
-          maxWidth: '100vw'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: 'var(--text-primary)' }}>
-            <Bell size={16} color="var(--color-primary)" style={{ flexShrink: 0 }} />
-            <span>
-              <strong>Уведомления выключены:</strong> Включите пуши, чтобы вовремя узнавать о поручениях директора и планёрках!
-            </span>
-          </div>
-          <button
-            onClick={handleRequestPush}
-            className="btn-primary btn-sm"
-            style={{
-              padding: '0.3rem 0.75rem',
-              fontSize: '0.78rem',
-              backgroundColor: '#0284c7',
-              flexShrink: 0
-            }}
-          >
-            Включить / Қосу
-          </button>
-        </div>
-      )}
 
       {/* Модальное окно установки для iOS Safari */}
       {showInstallGuide && (

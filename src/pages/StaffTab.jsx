@@ -17,20 +17,22 @@ import {
 } from 'lucide-react';
 
 export default function StaffTab() {
-  const { staff, addStaffMember, currentUser, isDirector, isHeadTeacher, t, schoolInfo } = useAuth();
+  const { staff, addStaffMember, deleteStaffMember, currentUser, isDirector, isHeadTeacher, t, schoolInfo, showToast } = useAuth();
 
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCardsModal, setShowCardsModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [memberToDelete, setMemberToDelete] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
   const [copiedAll, setCopiedAll] = useState(false);
 
   // Права просмотра логина и пароля:
-  // Директор видит всех, Завуч видит только учителей, Учитель не видит чужих паролей
+  // Директор видит всех, Админ видит только пользователей, Пользователь не видит чужих паролей
   const canViewMemberCredentials = (member) => {
     if (isDirector) return true;
-    if (isHeadTeacher && member.role === 'teacher') return true;
+    if (isHeadTeacher && member.role === 'user') return true;
     return false;
   };
 
@@ -38,13 +40,13 @@ export default function StaffTab() {
   const staffForCredentialsExport = isDirector
     ? staff
     : isHeadTeacher
-      ? staff.filter(m => m.role === 'teacher')
+      ? staff.filter(m => m.role === 'user')
       : [];
 
   // Форма добавления сотрудника
   const [name, setName] = useState('');
-  const [role, setRole] = useState('teacher');
-  const [roleTitle, setRoleTitle] = useState('Мұғалім / Учитель');
+  const [role, setRole] = useState('user');
+  const [roleTitle, setRoleTitle] = useState('Пайдаланушы / Пользователь');
   const [subject, setSubject] = useState('');
   const [classLeader, setClassLeader] = useState('');
   const [login, setLogin] = useState('');
@@ -91,8 +93,8 @@ export default function StaffTab() {
     await addStaffMember({
       name: name.trim(),
       role,
-      roleTitle: roleTitle.trim() || (role === 'teacher' ? 'Учитель' : 'Заместитель директора'),
-      subject: subject.trim() || 'Общие дисциплины',
+      roleTitle: roleTitle.trim() || (role === 'user' ? 'Пользователь' : 'Администратор'),
+      subject: subject.trim() || undefined,
       classLeader: classLeader.trim() || undefined,
       email: `${login.trim()}@sch43.kz`,
       phone: '+7 (7__) ___-__-__',
@@ -106,6 +108,20 @@ export default function StaffTab() {
     setPassHint('');
     setSubject('');
     setClassLeader('');
+  };
+
+  const handleDeleteClick = (member) => {
+    setMemberToDelete(member);
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!memberToDelete) return;
+    
+    await deleteStaffMember(memberToDelete.id);
+    setShowDeleteModal(false);
+    setMemberToDelete(null);
+    showToast?.(schoolInfo.shortName, `${memberToDelete.name} удален из системы`, 'success');
   };
 
   return (
@@ -186,16 +202,16 @@ export default function StaffTab() {
             Барлығы ({staff.length})
           </button>
           <button 
-            onClick={() => setRoleFilter('head_teacher')} 
-            className={roleFilter === 'head_teacher' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}
+            onClick={() => setRoleFilter('admin')} 
+            className={roleFilter === 'admin' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}
           >
-            Әкімшілік (Завучтер)
+            Әкімшілік (Администраторлар)
           </button>
           <button 
-            onClick={() => setRoleFilter('teacher')} 
-            className={roleFilter === 'teacher' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}
+            onClick={() => setRoleFilter('user')} 
+            className={roleFilter === 'user' ? 'btn-primary btn-sm' : 'btn-secondary btn-sm'}
           >
-            Мұғалімдер
+            Пайдаланушылар
           </button>
         </div>
 
@@ -233,18 +249,20 @@ export default function StaffTab() {
 
                 {member.role === 'director' ? (
                   <span className="badge badge-primary"><ShieldCheck size={12} /> Директор</span>
-                ) : member.role === 'head_teacher' ? (
-                  <span className="badge badge-purple">Завуч</span>
+                ) : member.role === 'admin' ? (
+                  <span className="badge badge-purple">Администратор</span>
                 ) : (
-                  <span className="badge badge-neutral">Мұғалім</span>
+                  <span className="badge badge-neutral">Пайдаланушы</span>
                 )}
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0.75rem 0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                  <GraduationCap size={15} color="var(--text-muted)" />
-                  <span>{member.subject}</span>
-                </div>
+                {member.subject && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                    <GraduationCap size={15} color="var(--text-muted)" />
+                    <span>{member.subject}</span>
+                  </div>
+                )}
                 {member.classLeader && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: 'var(--color-primary)' }}>
                     <span>🏫 Сынып жетекшісі: <strong>{member.classLeader}</strong></span>
@@ -257,7 +275,7 @@ export default function StaffTab() {
               </div>
             </div>
 
-            {/* Карточка доступов для входа: Директор видит всех, Завуч видит только учителей, Учитель не видит чужих паролей */}
+            {/* Карточка доступов для входа: Директор видит всех, Админ видит только пользователей, Пользователь не видит чужих паролей */}
             {canViewMemberCredentials(member) && (
               <div style={{
                 backgroundColor: 'var(--bg-surface-subtle)',
@@ -293,6 +311,18 @@ export default function StaffTab() {
                   <span>{t('staffPassword')}: <strong>{member.passHint}</strong></span>
                 </div>
               </div>
+            )}
+
+            {/* Кнопка удаления (только для директора, не для самого директора) */}
+            {isDirector && member.role !== 'director' && (
+              <button
+                onClick={() => handleDeleteClick(member)}
+                className="btn-secondary btn-sm"
+                style={{ marginTop: '0.5rem', width: '100%', gap: '0.4rem', color: '#e11d48', borderColor: '#fecdd3' }}
+              >
+                <X size={14} />
+                Удалить из системы
+              </button>
             )}
           </div>
         ))}
@@ -428,11 +458,11 @@ export default function StaffTab() {
                     <label className="form-label">Рөлі / Роль</label>
                     <select value={role} onChange={e => {
                       setRole(e.target.value);
-                      if (e.target.value === 'head_teacher') setRoleTitle('Заместитель директора');
-                      else setRoleTitle('Учитель');
+                      if (e.target.value === 'admin') setRoleTitle('Администратор');
+                      else setRoleTitle('Пользователь');
                     }}>
-                      <option value="teacher">Мұғалім (Учитель)</option>
-                      <option value="head_teacher">Оқу ісінің меңгерушісі (Завуч)</option>
+                      <option value="user">Пайдаланушы (Пользователь)</option>
+                      <option value="admin">Әкімшілік (Администратор)</option>
                     </select>
                   </div>
 
@@ -449,7 +479,7 @@ export default function StaffTab() {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div className="form-group">
-                    <label className="form-label">Пәні / Предмет(ы)</label>
+                    <label className="form-label">Пәні / Предмет(ы) (опционально)</label>
                     <input
                       type="text"
                       placeholder="Қазақ тілі, Қазақ әдебиеті"
@@ -459,7 +489,7 @@ export default function StaffTab() {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Сынып жетекшілігі / Класс</label>
+                    <label className="form-label">Сынып жетекшілігі / Класс (опционально)</label>
                     <input
                       type="text"
                       placeholder="6 «Ә» сыныбы"
@@ -514,6 +544,53 @@ export default function StaffTab() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Модалка подтверждения удаления */}
+      {showDeleteModal && memberToDelete && (
+        <div 
+          className="modal-backdrop" 
+          onMouseUp={(e) => {
+            if (e.target === e.currentTarget) setShowDeleteModal(false);
+          }}
+        >
+          <div className="modal-content" style={{ maxWidth: '420px' }} onMouseUp={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title" style={{ color: '#e11d48' }}>
+                <X size={20} style={{ verticalAlign: 'middle', marginRight: '0.5rem' }} />
+                Подтверждение удаления
+              </h2>
+              <button className="btn-ghost btn-icon" onClick={() => setShowDeleteModal(false)}>✕</button>
+            </div>
+
+            <div className="modal-body">
+              <p style={{ fontSize: '0.95rem', lineHeight: 1.6, marginBottom: '1rem' }}>
+                Вы действительно хотите удалить <strong>{memberToDelete.name}</strong> ({memberToDelete.roleTitle}) из системы?
+              </p>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                ⚠️ Это действие необратимо. Все данные пользователя будут удалены из базы данных.
+              </p>
+            </div>
+
+            <div className="modal-footer">
+              <button 
+                type="button" 
+                className="btn-secondary" 
+                onClick={() => setShowDeleteModal(false)}
+              >
+                Отмена
+              </button>
+              <button 
+                type="button" 
+                className="btn-primary" 
+                onClick={handleDeleteConfirm}
+                style={{ backgroundColor: '#e11d48', borderColor: '#e11d48' }}
+              >
+                Удалить
+              </button>
+            </div>
           </div>
         </div>
       )}

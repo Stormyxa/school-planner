@@ -1217,6 +1217,28 @@ export function AuthProvider({ children }) {
     return newMember;
   };
 
+  // Удаление сотрудника (только для директора)
+  const deleteStaffMember = async (memberId) => {
+    if (!isDirector) return;
+
+    setStaff(prev => {
+      const updated = prev.filter(s => s.id !== memberId);
+      localStorage.setItem('sp_staff_kz43', JSON.stringify(updated));
+      return updated;
+    });
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { error } = await supabase.from('profiles').delete().eq('id', memberId);
+        if (error) {
+          console.error('Ошибка удаления сотрудника из Supabase:', error.message);
+        }
+      } catch (err) {
+        console.warn('Supabase network notice:', err.message);
+      }
+    }
+  };
+
   const markAllNotificationsRead = async () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
 
@@ -1298,6 +1320,7 @@ export function AuthProvider({ children }) {
       addMeeting,
       deleteMeeting,
       addStaffMember,
+      deleteStaffMember,
       markAllNotificationsRead,
       deleteNotification,
       clearAllNotifications,
