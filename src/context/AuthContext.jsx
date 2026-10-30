@@ -96,7 +96,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const showToast = useCallback((title, message, type = 'task', taskId = null) => {
-    if (!areNotificationsEnabled()) return;
+    console.log('[showToast] Called:', { title, message, type, taskId, isTauri: !!window.__TAURI__ });
     setToast({
       id: `toast-${Date.now()}`,
       title,
@@ -104,7 +104,7 @@ export function AuthProvider({ children }) {
       type,
       taskId
     });
-  }, [areNotificationsEnabled]);
+  }, []);
 
   const dismissToast = useCallback(() => {
     setToast(null);
